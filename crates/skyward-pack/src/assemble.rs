@@ -213,6 +213,17 @@ pub fn build(r: &Recovery) -> Result<Vec<u8>> {
         props.push(b'\n');
     }
     rd.add("prop.default", 0o644, props)?;
+    // The other property files init reads in the ramdisk name the build the
+    // phone's own recovery was made from as well, and a property is set once:
+    // what they say of it is left out too, so the installed system's build
+    // can be written over it, as the secure world is told which build runs.
+    for name in ["system/build.prop", "vendor/build.prop"] {
+        let Some(file) = pool.get(name) else { continue };
+        let stripped = crate::without(&file.data, &crate::BUILD_VERSION);
+        if stripped.len() != file.data.len() {
+            rd.add(name, file.mode & 0o7777, stripped)?;
+        }
+    }
 
     let read = |p: &Path| fs::read(p).with_context(|| format!("read {}", p.display()));
     rd.add("skyward/system-init", 0o755, read(r.system_init)?)?;
