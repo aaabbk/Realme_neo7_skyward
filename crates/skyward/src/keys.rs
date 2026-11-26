@@ -41,7 +41,37 @@ pub fn found(slot: skyward_vab::Slot, libraries: Option<&Path>) -> Result<Found>
         name(&unnamed)?;
         phone = read(slot, libraries)?;
     }
-    Ok(Found { described: phone.told_of(), steps: secure::steps(&phone) })
+    let steps = secure::steps(&phone);
+    if steps.is_err() {
+        tell_of_the_phones_keys(&phone);
+    }
+    Ok(Found { described: phone.told_of(), steps })
+}
+
+/// Whether an interface a script names is one of the phone's key services,
+/// which keep the keys, or the one that keeps the credentials.
+fn of_the_keys(interface: &str) -> bool {
+    interface.contains("keymint") || interface.contains("gatekeeper")
+}
+
+/// Say what the phone names for its keys, where what it names does not say
+/// what to do with them: each program whose script says it serves a key
+/// service or the one that keeps the credentials, where its file is, and
+/// each service of the newer kind it is described as serving.
+fn tell_of_the_phones_keys(phone: &Phone) {
+    for program in &phone.programs {
+        if !program.interfaces.iter().any(|interface| of_the_keys(interface)) {
+            continue;
+        }
+        let carried = match phone.locate(&program.path) {
+            Some(at) if at.exists() => "which the phone carries".to_string(),
+            Some(at) => format!("whose file {} is not there", at.display()),
+            None => "which is on none of the partitions read".to_string(),
+        };
+        let interfaces: Vec<&str> = program.interfaces.iter().filter(|interface| of_the_keys(interface)).map(String::as_str).collect();
+        let _ = skyward_sys::kmsg(&format!("the phone names {} {} for its keys, {carried}: {}", program.path, program.args.join(" "), interfaces.join(", ")));
+    }
+    let _ = skyward_sys::kmsg(&format!("the phone describes {} services of the newer kind", phone.services.iter().filter(|s| s.described.kind == skyward_programs::description::Kind::Aidl).count()));
 }
 
 /// The phone as the partitions of the slot's installed system describe it,
@@ -58,7 +88,11 @@ fn read(slot: skyward_vab::Slot, libraries: Option<&Path>) -> Result<Phone> {
         let partition = mounted.iter().find(|m| m.partition == named).with_context(|| format!("{named} is not mounted"))?;
         partitions.push(Partition::mounted(name, &partition.mount_point));
     }
-    Phone::read(partitions, properties, libraries)
+    let phone = Phone::read(partitions, properties, libraries)?;
+    for unread in &phone.unread {
+        skyward_sys::kmsg(&format!("a script of the phone's is passed over, as its init passes it over: {unread}"))?;
+    }
+    Ok(phone)
 }
 
 /// Do what the phone's init does to name the builds its partitions

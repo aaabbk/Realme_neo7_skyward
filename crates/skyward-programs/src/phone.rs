@@ -153,6 +153,10 @@ pub struct Phone {
     pub programs: Vec<Program>,
     pub actions: Vec<Action>,
     pub services: Vec<Service>,
+    /// The scripts init would give up for the way they are written, each
+    /// with what the reading made of it: a script of a phone's partitions
+    /// that says nothing of the programs read here.
+    pub unread: Vec<String>,
 }
 
 impl Phone {
@@ -168,7 +172,15 @@ impl Phone {
                 None => properties.remove(name),
             };
         }
-        let mut phone = Phone { partitions, properties, bundle: bundle.map(Path::to_path_buf), programs: Vec::new(), actions: Vec::new(), services: Vec::new() };
+        let mut phone = Phone {
+            partitions,
+            properties,
+            bundle: bundle.map(Path::to_path_buf),
+            programs: Vec::new(),
+            actions: Vec::new(),
+            services: Vec::new(),
+            unread: Vec::new(),
+        };
         phone.read_scripts()?;
         phone.read_descriptions()?;
         Ok(phone)
@@ -316,7 +328,17 @@ impl Phone {
                 Err(e) if e.kind() == ErrorKind::NotFound => continue,
                 Err(e) => return Err(e).with_context(|| format!("read {}", file.display())),
             };
-            let script = script::read(&text).with_context(|| format!("read {path}"))?;
+            let script = match script::read(&text) {
+                Ok(script) => script,
+                // Init gives a script it cannot read up and goes on, and a
+                // phone's partitions carry scripts a recovery's reading has
+                // no use for; one of them says nothing of the programs the
+                // recovery starts, so it is passed over and told of.
+                Err(e) => {
+                    self.unread.push(format!("{path}: {e:#}"));
+                    continue;
+                }
+            };
             waiting.extend(script.imports.iter().filter_map(|import| self.expand(import)));
             self.actions.extend(script.actions);
             for mut program in script.programs {

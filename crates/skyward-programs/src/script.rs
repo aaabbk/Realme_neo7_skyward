@@ -156,6 +156,30 @@ fn lines(text: &str) -> Result<Vec<(usize, Vec<String>)>> {
             '#' if word.is_none() => {
                 while chars.next_if(|&c| c != '\n').is_some() {}
             }
+            // A script some phones carry begins with the banner its maker
+            // writes in the way C writes comments. The banner says nothing
+            // of the programs, and is passed over as a line of `#` is.
+            '/' if word.is_none() && chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut starred = false;
+                loop {
+                    match chars.next() {
+                        None => break,
+                        Some('/') if starred => break,
+                        Some('\n') => {
+                            words.extend(word.take());
+                            if !words.is_empty() {
+                                out.push((began, std::mem::take(&mut words)));
+                            }
+                            number += 1;
+                            began = number;
+                            starred = false;
+                        }
+                        Some('*') => starred = true,
+                        Some(_) => starred = false,
+                    }
+                }
+            }
             '"' => {
                 let quoted = word.get_or_insert_with(String::new);
                 loop {
@@ -395,8 +419,26 @@ mod tests {
     }
 
     #[test]
-    fn a_line_outside_any_section_is_refused() {
-        assert!(read("user system\n").is_err());
+    fn a_banner_written_in_the_way_c_writes_comments_says_nothing_of_the_programs() {
+        let script = read(
+            "/******************************************************************************\n\
+             \x20* Copyright (C) 2024, a maker that writes them so.\n\
+             \x20******************************************************************************/\n\
+             service vendor.occe /odm/bin/occe --a /b\n\
+             \x20   class main /* beside the class */ late_start\n\
+             on boot\n\
+             \x20   start vendor.occe\n",
+        )
+        .unwrap();
+        let [program] = &script.programs[..] else { panic!("one service") };
+        assert_eq!((program.name.as_str(), program.args.len()), ("vendor.occe", 2));
+        assert_eq!(program.classes, ["main", "late_start"], "a comment between words leaves them apart");
+        assert_eq!(script.actions[0].commands, [strings(&["start", "vendor.occe"])]);
+        assert!(read("/*** open to the end\nservice a /a\n").is_ok(), "an unterminated comment runs to the end of the script");
+    }
+
+    #[test]
+    fn a_line_outside_any_section_is_refused() {        assert!(read("user system\n").is_err());
         assert!(read("service a\n").is_err(), "a service without its program");
         assert!(read("service a /a\n    user\n").is_err(), "a user line that names none");
         assert!(read("service a /a\n    setenv \"A\n").is_err(), "a quote left open");
