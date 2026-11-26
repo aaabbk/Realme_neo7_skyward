@@ -186,7 +186,7 @@ pub fn build(r: &Recovery) -> Result<Vec<u8>> {
         ensure!(!file.to.starts_with('/') && file.to != "prop.default", "{} is not a path to put a file at", file.to);
         rd.add(&file.to, file.mode.unwrap_or(0o644), data)?;
     }
-    ensure!(rd.find("system/bin/init").is_some(), "the recovery takes no init: nothing would start");
+    ensure!(pool.get("system/bin/init").is_some(), "the stock image holds no init: nothing would start");
     ensure!(rd.find("system/bin/recovery").is_some(), "the recovery takes no program to be the recovery");
 
     // The rules init runs: our own, in place of the phone maker's, which
