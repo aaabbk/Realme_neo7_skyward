@@ -763,7 +763,14 @@ fn recovery() -> Result<()> {
         if skyward_sys::prop("sys.usb.state").is_some_and(|s| s != "adb") {
             skyward_sys::usb::set("none", std::time::Duration::from_secs(5))?;
         }
-        skyward_sys::set_prop("sys.usb.config", "adb")?;
+        // The port is asked for, and bound here where the phone's own rules
+        // named no controller init could find: a phone reached by no
+        // computer cannot be looked into when something else fails.
+        match skyward_sys::usb::ensure("adb", std::time::Duration::from_secs(3)) {
+            Ok(name) if name.is_empty() => {}
+            Ok(name) => skyward_sys::kmsg(&format!("the port is bound to {name} by the recovery"))?,
+            Err(e) => skyward_sys::kmsg(&format!("the port is not given to adb: {e:#}"))?,
+        }
         let misc = bcb::misc();
         let message = bcb::read(&misc)?;
         let request = message.request();
