@@ -3,12 +3,13 @@
 # vendor_boot, where the phone keeps its recovery.
 #
 # On a computer: the Rust toolchain rust-toolchain.toml names with the
-# aarch64-linux-android target, Android NDK r29 and cargo-ndk, lz4, and the
-# phone's own vendor_boot image — the whole partition as the phone holds it,
-# ending in its AVB footer, which is what `fastboot fetch vendor_boot` or a
-# full update package gives.
+# aarch64-linux-android target, an Android NDK (its clang links the phone's
+# programs), lz4, and the phone's own vendor_boot image — the whole
+# partition as the phone holds it, ending in its AVB footer, which is what
+# `fastboot fetch vendor_boot` or a full update package gives.
 #
-#   STOCK=vendor_boot.img sh devices/rmx5060/build.sh
+#   ANDROID_NDK_HOME=/path/to/android-ndk STOCK=vendor_boot.img \
+#       sh devices/rmx5060/build.sh
 #
 # Writes target/vendor_boot_skyward.img, to be flashed over vendor_boot on
 # an unlocked phone whose verification is off; see docs/rmx5060.md.
@@ -16,15 +17,28 @@ set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 
-stock=${STOCK:?give the phone's own vendor_boot image in STOCK}
+stock=${STOCK:?give the phone its own vendor_boot image in STOCK}
+ndk=${ANDROID_NDK_HOME:-${NDK:?give the folder of an Android NDK in ANDROID_NDK_HOME}}
 [ -f "$stock" ] || { echo "no $stock" >&2; exit 1; }
 
+# The NDK's own folder for this computer, whichever it is: the same clang
+# builds the phone's programs on a computer of the phone's own kind.
+host=$(basename "$(ls -d "$ndk"/toolchains/llvm/prebuilt/*/ | head -1)")
+bin=$ndk/toolchains/llvm/prebuilt/$host/bin
+api=${API:-30}
+
+export CC_aarch64_linux_android=$bin/aarch64-linux-android$api-clang
+export CXX_aarch64_linux_android=$bin/aarch64-linux-android$api-clang++
+export AR_aarch64_linux_android=$bin/llvm-ar
+export RANLIB_aarch64_linux_android=$bin/llvm-ranlib
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$CC_aarch64_linux_android
+
 echo "building Skyward for the phone"
-cargo ndk -t arm64-v8a --platform 30 build --release -p skyward
+cargo build --release -p skyward --target aarch64-linux-android
 
 echo "building the second system's first program"
 RUSTFLAGS="-C target-feature=+crt-static" \
-    cargo ndk -t arm64-v8a --platform 30 build --release -p skyward-system-init --target-dir target/system-init
+    cargo build --release -p skyward-system-init --target aarch64-linux-android --target-dir target/system-init
 
 echo "building the packer"
 cargo build --release -p skyward-pack
