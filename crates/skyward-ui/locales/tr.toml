@@ -633,7 +633,6 @@ current = "{slot} (geçerli)"
 system = "Sistem"
 recovery = "Kurtarma modu"
 fastboot_note = "Kullanıcı alanı fastbootd"
-edl_note = "Qualcomm acil indirme modu"
 power_off = "Kapat"
 
 [specs]

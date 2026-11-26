@@ -633,7 +633,6 @@ current = "{slot} (hiện tại)"
 system = "Hệ thống"
 recovery = "Recovery"
 fastboot_note = "fastbootd trong không gian người dùng"
-edl_note = "Chế độ tải xuống khẩn cấp của Qualcomm"
 power_off = "Tắt nguồn"
 
 [specs]

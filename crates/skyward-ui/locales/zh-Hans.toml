@@ -628,7 +628,6 @@ current = "{slot}（当前）"
 system = "系统"
 recovery = "恢复模式"
 fastboot_note = "用户空间 fastbootd"
-edl_note = "高通紧急下载模式"
 power_off = "关机"
 
 [specs]

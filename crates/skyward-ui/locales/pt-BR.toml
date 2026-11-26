@@ -638,7 +638,6 @@ current = "{slot} (atual)"
 system = "Sistema"
 recovery = "Recovery"
 fastboot_note = "fastbootd no espaço do usuário"
-edl_note = "Download de emergência da Qualcomm"
 power_off = "Desligar"
 
 [specs]

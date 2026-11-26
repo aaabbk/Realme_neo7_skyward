@@ -868,8 +868,15 @@ fn answer(request: Request, fastboot: bool) -> Vec<Effect> {
 /// else the one the system is built to start in. A name the recovery
 /// carries no rules for goes to the kernel log, and the clock stays in the
 /// zone it keeps.
-fn follow_system_zone(app: &mut App, kept: Option<&str>, info: &skyward_info::DeviceInfo) -> Result<()> {
-    let Some(name) = kept.or(info.time_zone.as_deref()) else { return Ok(()) };
+fn follow_system_zone(
+    app: &mut App,
+    kept: Option<&str>,
+    info: &skyward_info::DeviceInfo,
+    built: Option<&str>,
+) -> Result<()> {
+    // What the system was last seen set to, then what it is built to start
+    // in, then what the phone itself names for a phone with no system.
+    let Some(name) = kept.or(info.time_zone.as_deref()).or(built) else { return Ok(()) };
     match app.set_system_zone(name) {
         Ok(()) => skyward_sys::kmsg(&format!("the installed system keeps the time zone {name}")),
         Err(e) => skyward_sys::kmsg(&format!("the installed system's time zone is not followed: {e:#}")),
@@ -1323,7 +1330,9 @@ impl<'a> Pages<'a> {
         // system named with the work it asks for, or the one the installed
         // system is built to start in, or else the one they last spoke.
         let kept = settings::read()?;
-        let locale = request.locale.as_deref().or(info.locale.as_deref());
+        // The system's own language, then the one the work asks for, then the one
+        // the phone is built with, as a phone whose system is not there has none.
+        let locale = request.locale.as_deref().or(info.locale.as_deref()).or(cfg.device.locale.as_deref());
         let named = locale.map(Lang::for_locale).transpose()?;
         app.take_settings(kept.settings(), named);
         let keeper = Keeper::new(&kept);
@@ -1338,7 +1347,7 @@ impl<'a> Pages<'a> {
         // data partition opens and tells which it is set to now. A phone
         // with no system names none, and keeps the zone chosen.
         if app.state.system_zone.is_none() {
-            follow_system_zone(&mut app, None, &info)?;
+            follow_system_zone(&mut app, None, &info, cfg.device.time_zone.as_deref())?;
         }
         app.set_now(unix_now()?);
         // The home page tells of a restart into the slot the system does not
@@ -2020,7 +2029,7 @@ impl Pages<'_> {
                     }
                     self.closed = opening.closed;
                     show_closed(&mut self.app, &self.closed)?;
-                    follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
+                    follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info, self.cfg.device.time_zone.as_deref())?;
                 }
                 wipe::Event::Ended(outcome) => {
                     let said = outcome.as_ref().map_or_else(wipe::said, |_| "done".to_string());
@@ -2387,7 +2396,7 @@ impl Pages<'_> {
                 }
                 self.closed = opening.closed;
                 show_closed(&mut self.app, &self.closed)?;
-                follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info)?;
+                follow_system_zone(&mut self.app, kept_time_zone()?.as_deref(), &self.info, self.cfg.device.time_zone.as_deref())?;
             }
             decrypt::Ended::Opened(Err(why)) => {
                 skyward_sys::kmsg(&format!("the data partition stays closed: {why}"))?;

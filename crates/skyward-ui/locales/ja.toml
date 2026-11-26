@@ -628,7 +628,6 @@ current = "{slot}（現在）"
 system = "システム"
 recovery = "リカバリモード"
 fastboot_note = "ユーザー空間の fastbootd"
-edl_note = "Qualcomm 緊急ダウンロード"
 power_off = "電源を切る"
 
 [specs]

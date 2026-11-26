@@ -643,7 +643,6 @@ current = "{slot} (текущий)"
 system = "Система"
 recovery = "Рекавери"
 fastboot_note = "fastbootd в пользовательском пространстве"
-edl_note = "Аварийная загрузка Qualcomm"
 power_off = "Выключить"
 
 [specs]

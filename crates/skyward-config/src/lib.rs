@@ -284,6 +284,14 @@ pub struct Device {
     /// System property that carries the vendor OS version.
     #[serde(default = "default_os_version_prop")]
     pub os_version_prop: String,
+    /// The language the pages speak where neither the phone's own system
+    /// nor a choice made before names one, as "zh-CN" is.
+    #[serde(default)]
+    pub locale: Option<String>,
+    /// The time zone the clock is in where neither the system nor what was
+    /// kept before names one, as "Asia/Shanghai" is.
+    #[serde(default)]
+    pub time_zone: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -801,17 +809,22 @@ mod tests {
         assert_eq!(cfg.device.codename, "rmx5060");
         assert_eq!(cfg.device.model, "RMX5060");
         assert_eq!(cfg.device.os_version_prop, "ro.build.display.id");
+        assert_eq!(cfg.device.locale.as_deref(), Some("zh-CN"));
+        assert_eq!(cfg.device.time_zone.as_deref(), Some("Asia/Shanghai"));
         assert_eq!((cfg.display.width, cfg.display.height, cfg.display.density), (1264, 2780, 480));
         assert_eq!(cfg.display.diagonal, Some(6.78));
         assert_eq!(cfg.modules.sources, ["vendor_boot"], "the kernel's modules are the image's own");
-        assert!(cfg.modules.load.is_empty(), "the first stage loads the modules a recovery takes already");
+        assert_eq!(cfg.modules.load, ["mcDrvModule-ffa"], "the secure world's node, from the image");
         assert_eq!(cfg.backup.efs, ["nvdata", "nvcfg", "protect1", "protect2", "persist"]);
-        // The recovery is made to start with super empty: no program of the
-        // phone's vendor or odm partition is started, no partition of super is
-        // mounted, and none of its files is read before the pages come up.
-        assert!(cfg.services.is_empty(), "no program of super is started");
+        // The recovery comes up with super empty: the partition it mounts is
+        // the phone's own, and every program it starts is on the phone's own
+        // partitions, reached only once those are mounted. Nothing of the
+        // installed system is asked for before the pages are up.
+        assert_eq!(cfg.partitions.mounted, ["persist"], "a partition of its own, not of super");
+        for s in &cfg.services {
+            assert!(s.path.starts_with("/vendor/") || s.path.starts_with("/odm/"), "{} is not the phone's own", s.path);
+        }
         assert!(cfg.firmware.is_none(), "nothing of the modem partition is reached");
-        assert!(cfg.partitions.mounted.is_empty(), "nothing of super is mounted");
         assert!(cfg.logd.is_none() && cfg.wlan.is_none() && cfg.update.is_none(), "none of them without super");
         assert!(cfg.stock.is_none(), "a vendor_boot is not built from a package");
         assert!(cfg.haptics.is_none() && cfg.owners.is_empty() && cfg.wipe.logs.is_empty());

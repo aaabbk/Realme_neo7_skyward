@@ -146,12 +146,11 @@ pub const HOME_TITLE: &str = "Skyward";
 
 /// Where the phone can restart to, and what is said under the name of one
 /// that wants it.
-const REBOOT_TARGETS: [(Text, Option<Text>); 6] = [
+const REBOOT_TARGETS: [(Text, Option<Text>); 5] = [
     (texts::reboot::target::SYSTEM, None),
     (texts::reboot::target::RECOVERY, None),
     (same("Fastboot"), Some(texts::reboot::target::FASTBOOT_NOTE)),
     (same("Bootloader"), None),
-    (same("EDL"), Some(texts::reboot::target::EDL_NOTE)),
     (texts::reboot::target::POWER_OFF, None),
 ];
 

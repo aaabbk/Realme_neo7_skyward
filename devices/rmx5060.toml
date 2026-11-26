@@ -28,6 +28,10 @@ ab = true
 soc = { hans = "联发科 天玑 9300+", hant = "聯發科 天璣 9300+", en = "MediaTek Dimensity 9300+" }
 # ro.build.display.id in the odm partition, RMX5060_11_A.01.
 os_version_prop = "ro.build.display.id"
+# The language and the time zone the pages start in where the installed
+# system names neither, as a phone whose super is empty does.
+locale = "zh-CN"
+time_zone = "Asia/Shanghai"
 
 [display]
 # The panel's own mode, from the display configuration the vendor partition
@@ -46,7 +50,9 @@ diagonal = 6.78
 # panel modules and the motor's aw8697 among them. Nothing has to be loaded
 # here, and nothing here is on a partition the phone may not have.
 sources = ["vendor_boot"]
-load = []
+# The secure world's node comes from a module the first stage loads as a
+# recovery does; asking for it again costs nothing and holds nothing up.
+load = ["mcDrvModule-ffa"]
 
 # TODO: [touch]. The panel is Synaptics TouchComm over SPI behind OPPO's
 # touch layer, driven by oplus_bsp_synaptics_tcm2, which the recovery
@@ -63,7 +69,87 @@ load = []
 # logd that a recovery of our own carries needs none of the installed
 # system's libraries. None of them is made to work without super yet.
 
-# TODO: [partitions], [firmware]: nothing is mounted before Skyward runs.
+# The secure world is Trustonic's. Its daemon must be running before the key
+# service, which the recovery reads out of the phone's own partitions: the
+# daemon registers the drivers the secure world runs, out of the registry the
+# persist partition keeps, and says it is ready in ro.vendor.trustonic.ready.
+# mcDrvModule makes the node it opens; the first stage loads it.
+[partitions]
+mounted = ["persist"]
+
+[[service]]
+path = "/vendor/bin/mcDriverDaemon"
+args = [
+    "--P1",
+    "/mnt/vendor/persist/mcRegistry",
+    "-r",
+    "/vendor/app/mcRegistry/06090000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/020f0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/05120000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/05120000000000000000000000000001.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/05160000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/020b0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/05070000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/030b0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/03100000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/030c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/031c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/032c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/034c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/035c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/036c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/037c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/40188311faf343488db888ad39496f9a.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/070c0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/090b0000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/0f5eed3c3b5a47afacca69a84bf0efad.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/07060000000000000000000000007169.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/4be4f7dc1f2c11e5b5f7727283247c7f.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/08070000000000000000000000008270.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/07070000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/07407000000000000000000000000000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/9073f03a9618383bb1856eb3f990babd.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/6b3f5fa0f8cf55a7be2582587d62d63a.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/5020170115e016302017012521300000.drbin",
+    "-r",
+    "/vendor/app/mcRegistry/07210000000000000000000000000000.drbin",
+    "-r",
+    "/odm/vendor/app/mcRegistry/033c0000000000000000000000000000.drbin",
+    "-r",
+    "/odm/vendor/app/mcRegistry/09070000000000000000000000000000.drbin",
+]
+user = "system"
+groups = ["system"]
+ready_property = "ro.vendor.trustonic.ready"
+
+# TODO: [firmware]: nothing is mounted before Skyward runs.
 # The recovery mounts persist itself (the phone's own init.rc did), and the
 # table it reads is the one written into its own ramdisk at
 # vendor/etc/fstab.mt6989, which is the phone's own when the phone has a

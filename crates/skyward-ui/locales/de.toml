@@ -633,7 +633,6 @@ current = "{slot} (aktuell)"
 system = "System"
 recovery = "Recovery"
 fastboot_note = "fastbootd im Userspace"
-edl_note = "Qualcomm-Notfall-Download"
 power_off = "Ausschalten"
 
 [specs]
