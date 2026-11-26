@@ -865,9 +865,9 @@ mod tests {
 
     #[test]
     fn rmx5060_needs_nothing_of_the_phones_super() {
-        let cfg = DeviceConfig::parse(include_str!("../../../devices/rmx5060.toml")).unwrap();
-        assert_eq!(cfg.device.codename, "rmx5060");
-        assert_eq!(cfg.device.model, "RMX5060");
+        let cfg = DeviceConfig::parse(include_str!("../../../devices/RMX5060.toml")).unwrap();
+        assert_eq!(cfg.device.codename, "RMX5060");
+        assert_eq!(cfg.device.model, "真我Neo7");
         assert_eq!(cfg.device.os_version_prop, "ro.build.display.id");
         assert_eq!(cfg.device.locale.as_deref(), Some("zh-CN"));
         assert_eq!(cfg.device.time_zone.as_deref(), Some("Asia/Shanghai"));

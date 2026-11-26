@@ -9,10 +9,10 @@
 # `fastboot fetch vendor_boot` or a full update package gives.
 #
 #   ANDROID_NDK_HOME=/path/to/android-ndk STOCK=vendor_boot.img \
-#       sh devices/rmx5060/build.sh
+#       sh devices/RMX5060/build.sh
 #
 # Writes target/vendor_boot_skyward.img, to be flashed over vendor_boot on
-# an unlocked phone whose verification is off; see docs/rmx5060.md.
+# an unlocked phone whose verification is off; see docs/RMX5060.md.
 set -e
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -48,11 +48,11 @@ target/release/skyward-pack vendor-boot \
     --stock "$stock" \
     --binary target/aarch64-linux-android/release/skyward \
     --system-init target/system-init/aarch64-linux-android/release/system-init \
-    --config devices/rmx5060.toml \
-    --manifest devices/rmx5060.recovery.toml \
+    --config devices/RMX5060.toml \
+    --manifest devices/RMX5060.recovery.toml \
     --init-rc crates/skyward-pack/recovery/init.rc \
     --usb-rc crates/skyward-pack/recovery/usb.rc \
-    --font devices/rmx5060/MiSansVF-subset.ttf \
+    --font devices/RMX5060/MiSansVF-subset.ttf \
     --mono resources/fonts/KirkMono-Regular.ttf \
     --mono-license resources/fonts/KirkMono-OFL.txt \
     --out target/vendor_boot_skyward.img

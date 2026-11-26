@@ -9,7 +9,7 @@
 # The phone has no recovery partition: its recovery is a ramdisk fragment of
 # vendor_boot, the one the fragment table names "recovery", the other being
 # the platform ramdisk every start takes. A recovery of our own is written
-# there, and what it is made of is devices/rmx5060.recovery.toml.
+# there, and what it is made of is devices/RMX5060.recovery.toml.
 #
 # Nothing here is on the phone's super: the recovery is made to start with
 # super empty, as it is after a wipe, so every program and library it runs
@@ -21,11 +21,11 @@
 # What Skyward's own images and releases are named by. The vendor partition
 # names the phone ossi; the file and this name follow the model number the
 # phone is sold under, and only have to agree with each other.
-codename = "rmx5060"
+codename = "RMX5060"
 brand = "realme"
-model = "RMX5060"
+model = "真我Neo7"
 ab = true
-soc = { hans = "联发科 天玑 9300+", hant = "聯發科 天璣 9300+", en = "MediaTek Dimensity 9300+" }
+soc = { hans = "天玑9300+", hant = "天璣9300+", en = "Dimensity 9300+" }
 # ro.build.display.id in the odm partition, RMX5060_11_A.01.
 os_version_prop = "ro.build.display.id"
 # The language and the time zone the pages start in where the installed

@@ -51,5 +51,5 @@ udc = "11201000.usb0"
 # phone mounts where: from the vendor partition when the phone has a system,
 # and from here when it has none.
 [[host]]
-from = "devices/rmx5060/fstab.mt6989"
+from = "devices/RMX5060/fstab.mt6989"
 to = "vendor/etc/fstab.mt6989"
