@@ -3044,8 +3044,9 @@ pub fn logs(cx: &Ctx) -> Frame {
     let places = widgets::list(&mut c, t, f, y, &[
         Row::new(l.pick(texts::logs::TEMPORARY)).subtitle(l.pick(texts::logs::TEMPORARY_NOTE)).trail(Trail::Check(s.logs_to == 0)),
         Row::new(place_name(l, Place::Storage)).subtitle(storage).trail(Trail::Check(s.logs_to == 1)),
+        Row::new(l.pick(texts::logs::METADATA)).subtitle(l.pick(texts::logs::METADATA_NOTE)).trail(Trail::Check(s.logs_to == 2)),
     ]);
-    out.extend(hits(&places.rows, &[Action::LogsTo(0), Action::LogsTo(1)]));
+    out.extend(hits(&places.rows, &[Action::LogsTo(0), Action::LogsTo(1), Action::LogsTo(2)]));
     let y = widgets::footnote(&mut c, t, f, places.bottom, l.pick(texts::logs::NOTE));
     let export = widgets::button(&mut c, t, f, y + t.m.dp(24.0), l.pick(texts::logs::EXPORT));
     out.push(Hit { rect: export, action: Action::ExportLogs });

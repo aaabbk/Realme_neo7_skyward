@@ -532,6 +532,8 @@ temporary = "Geçici klasör"
 temporary_note = "/skyward/run/logs; adb pull ile bilgisayara kopyalanabilir"
 folder = "Skyward/logs klasörü"
 note = "Her dışa aktarma, yapıldığı zamana göre adlandırılan bir klasöre kaydedilir. Yeniden başlatma geçici klasörü boşaltır."
+metadata = "Metadata bölümü"
+metadata_note = "/metadata/skyward, veri bölümü kapalıyken de"
 export = "Dışa aktar"
 
 [screenshot]

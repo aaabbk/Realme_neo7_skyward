@@ -22,7 +22,7 @@ const USB_DRIVE: &str = "usb_drive";
 /// The logs exported, and where they go, by name, in the order of the page
 /// that exports them.
 const LOGS: [&str; 2] = ["recovery", "kernel"];
-const LOG_PLACES: [&str; 2] = ["temporary", "storage"];
+const LOG_PLACES: [&str; 3] = ["temporary", "storage", "metadata"];
 
 /// The settings as they are kept. A value missing is the one a recovery
 /// starts with, and one this version does not know is left out.
@@ -359,6 +359,11 @@ mod tests {
         assert_eq!(json["system_time_zone"], "Europe/Rome", "by the name the system gives it");
         assert_eq!(json["backup"]["parts"], serde_json::json!(["boot", "modem"]));
         assert_eq!(json["logs"]["to"], "temporary");
+        let third = Settings::of(&State { logs_to: 2, ..State::default() });
+        assert_eq!(third.logs.to, "metadata", "the metadata partition is a place of its own");
+        let mut back = State::default();
+        third.apply(&mut back);
+        assert_eq!(back.logs_to, 2, "and it is read back as the third");
         assert_eq!(json["spoken"], "zh-Hans");
         assert!(json.get("language").is_none(), "no language is chosen until one is");
         let never = Settings::of(&State { screen_off: SCREEN_OFF.len() - 1, ..State::default() });

@@ -298,13 +298,13 @@ impl App {
                 self.refresh();
             }
             Action::ExportLogs => {
-                let ([recovery, kernel], storage) = (self.state.logs, self.state.logs_to == 1);
+                let ([recovery, kernel], to) = (self.state.logs, self.state.logs_to);
                 if !recovery && !kernel {
                     self.say(l.pick(texts::toast::CHOOSE_LOGS), now);
-                } else if storage && !self.state.data.storage_open() {
+                } else if to == 1 && !self.state.data.storage_open() {
                     self.say(l.pick(DECRYPT_FIRST), now);
                 } else {
-                    return vec![Effect::ExportLogs { recovery, kernel, storage }];
+                    return vec![Effect::ExportLogs { recovery, kernel, to: to as u8 }];
                 }
             }
             Action::PickSlot(slot) => {

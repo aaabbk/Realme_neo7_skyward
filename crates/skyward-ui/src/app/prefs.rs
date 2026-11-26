@@ -537,7 +537,7 @@ mod tests {
     fn logs_are_exported_as_ticked_where_they_can_go() {
         let (f, i) = (fonts(), info());
         let mut app = App::new(Screen::Logs, W, H, PPD);
-        let both = Effect::ExportLogs { recovery: true, kernel: true, storage: false };
+        let both = Effect::ExportLogs { recovery: true, kernel: true, to: 0 };
         assert_eq!(tap(&mut app, &f, &i, Action::ExportLogs), vec![both], "both, to the temporary folder, at first");
         tap(&mut app, &f, &i, Action::LogPart(0));
         tap(&mut app, &f, &i, Action::LogsTo(1));
@@ -545,7 +545,13 @@ mod tests {
         app.tick(1000);
         assert_eq!(app.deadline(1000), Some(TOAST_MS), "and says so");
         app.data_waiting(None);
-        assert_eq!(tap(&mut app, &f, &i, Action::ExportLogs), vec![Effect::ExportLogs { recovery: false, kernel: true, storage: true }]);
+        assert_eq!(tap(&mut app, &f, &i, Action::ExportLogs), vec![Effect::ExportLogs { recovery: false, kernel: true, to: 1 }]);
+        tap(&mut app, &f, &i, Action::LogsTo(2));
+        assert_eq!(
+            tap(&mut app, &f, &i, Action::ExportLogs),
+            vec![Effect::ExportLogs { recovery: false, kernel: true, to: 2 }],
+            "the metadata partition needs no data partition"
+        );
         tap(&mut app, &f, &i, Action::LogPart(1));
         assert!(tap(&mut app, &f, &i, Action::ExportLogs).is_empty(), "nothing ticked, nothing saved");
     }

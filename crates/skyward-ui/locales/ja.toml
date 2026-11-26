@@ -527,6 +527,8 @@ temporary = "一時フォルダ"
 temporary_note = "/skyward/run/logs、adb pull でパソコンにコピーできます"
 folder = "Skyward/logs フォルダ"
 note = "エクスポートのたびに、その日時を名前にしたフォルダへ保存されます。再起動すると一時フォルダは空になります。"
+metadata = "メタデータ領域"
+metadata_note = "/metadata/skyward、データ領域が閉じていても保存できる"
 export = "エクスポート"
 
 [screenshot]

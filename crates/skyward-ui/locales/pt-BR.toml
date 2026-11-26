@@ -537,6 +537,8 @@ temporary = "Pasta temporária"
 temporary_note = "/skyward/run/logs, que o adb pull copia para um computador"
 folder = "Pasta Skyward/logs"
 note = "Cada exportação fica em uma pasta com o nome do momento em que foi feita. Reiniciar esvazia a pasta temporária."
+metadata = "Partição metadata"
+metadata_note = "/metadata/skyward, mesmo com os dados fechados"
 export = "Exportar"
 
 [screenshot]

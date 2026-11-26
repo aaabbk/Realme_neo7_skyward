@@ -527,6 +527,8 @@ temporary = "Folder sementara"
 temporary_note = "/skyward/run/logs, yang dapat disalin ke komputer dengan adb pull"
 folder = "Folder Skyward/logs"
 note = "Setiap ekspor disimpan di folder yang dinamai menurut waktu pembuatannya. Mulai ulang mengosongkan folder sementara."
+metadata = "Partisi metadata"
+metadata_note = "/metadata/skyward, walau partisi data tertutup"
 export = "Ekspor"
 
 [screenshot]

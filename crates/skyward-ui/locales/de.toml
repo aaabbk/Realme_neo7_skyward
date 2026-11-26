@@ -532,6 +532,8 @@ temporary = "Temporärer Ordner"
 temporary_note = "/skyward/run/logs, mit adb pull auf einen Computer kopierbar"
 folder = "Ordner Skyward/logs"
 note = "Jeder Export kommt in einen Ordner, der nach seinem Zeitpunkt benannt ist. Ein Neustart leert den temporären Ordner."
+metadata = "Metadata-Partition"
+metadata_note = "/metadata/skyward, auch bei geschlossener Datenpartition"
 export = "Exportieren"
 
 [screenshot]

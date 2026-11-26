@@ -73,6 +73,9 @@ const REST: Duration = Duration::from_secs(5);
 /// Where logs saved to the temporary folder go, in the recovery service's
 /// own folder, and where in internal storage the others do.
 const TMP_LOGS: &str = "/skyward/run/logs";
+/// The recovery's own folder on the metadata partition, which no key is
+/// needed to write and which a reboot keeps.
+const METADATA_LOGS: &str = "/metadata/skyward";
 const STORAGE_LOGS: &str = "Skyward/logs";
 
 /// The folder of internal storage the system saves its own screenshots in,
@@ -408,6 +411,25 @@ fn export_logs(recovery: bool, kernel: bool, into: &Path, zone: &TimeZone) -> Re
         save("kernel.log", skyward_sys::kernel_log()?.as_bytes())?;
     }
     Ok(folder)
+}
+
+/// Save the logs on the metadata partition: the recovery's own, which no
+/// key is needed to write. It is mounted read-only until something writes
+/// to it, as the settings are written, and mounted here where nothing has
+/// mounted it yet.
+fn export_logs_within_metadata(recovery: bool, kernel: bool, into: &Path, zone: &TimeZone) -> Result<PathBuf> {
+    let at = Path::new("/metadata");
+    let mounted = mount::is_mount_point(at)?;
+    if !mounted {
+        mount::mount_ro(&Path::new(skyward_block::BY_NAME).join("metadata"), at)?;
+    }
+    skyward_vab::metadata_writable(true)?;
+    let done = export_logs(recovery, kernel, into, zone);
+    let back = skyward_vab::metadata_writable(false);
+    if !mounted {
+        let _ = mount::umount(at);
+    }
+    done.and_then(|folder| back.map(|()| folder))
 }
 
 /// Save `frame`, what the panel shows, as a picture named for when it was
@@ -2710,12 +2732,17 @@ impl Pages<'_> {
             Effect::StopSkywardUpdate => self.skyward_updater.as_ref().context("Skyward is not being updated")?.stop(),
             // Logs that cannot be saved are the page's to report;
             // the recovery carries on.
-            Effect::ExportLogs { recovery, kernel, storage } => {
-                let into = match storage {
-                    true => Path::new(skyward_crypto::data::SDCARD).join(STORAGE_LOGS),
-                    false => PathBuf::from(TMP_LOGS),
+            Effect::ExportLogs { recovery, kernel, to } => {
+                let into = match to {
+                    0 => PathBuf::from(TMP_LOGS),
+                    1 => Path::new(skyward_crypto::data::SDCARD).join(STORAGE_LOGS),
+                    _ => PathBuf::from(METADATA_LOGS),
                 };
-                match export_logs(recovery, kernel, &into, self.app.state.zone()) {
+                let exported = match to {
+                    2 => export_logs_within_metadata(recovery, kernel, &into, self.app.state.zone()),
+                    _ => export_logs(recovery, kernel, &into, self.app.state.zone()),
+                };
+                match exported {
                     Ok(folder) => self.app.report(&skyward_ui::fmt::exported(self.app.state.lang, &folder.display().to_string()), now),
                     Err(e) => self.app.report(&skyward_ui::fmt::export_failed(self.app.state.lang, &format!("{e:#}")), now),
                 }

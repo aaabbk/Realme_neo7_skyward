@@ -532,6 +532,8 @@ temporary = "Thư mục tạm"
 temporary_note = "/skyward/run/logs, dùng adb pull để chép sang máy tính"
 folder = "Thư mục Skyward/logs"
 note = "Mỗi lần xuất nằm trong một thư mục đặt tên theo thời điểm xuất. Khởi động lại sẽ làm trống thư mục tạm."
+metadata = "Phân vùng metadata"
+metadata_note = "/metadata/skyward, kể cả khi phân vùng dữ liệu đang đóng"
 export = "Xuất"
 
 [screenshot]

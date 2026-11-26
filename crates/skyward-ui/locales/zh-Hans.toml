@@ -527,6 +527,8 @@ temporary = "临时文件夹"
 temporary_note = "/skyward/run/logs，可通过 adb pull 导出到电脑"
 folder = "Skyward/logs 文件夹"
 note = "每次导出保存在以导出时间命名的文件夹中。重启后将清空临时文件夹。"
+metadata = "Metadata 分区"
+metadata_note = "/metadata/skyward，数据分区加密时也能写"
 export = "导出"
 
 [screenshot]

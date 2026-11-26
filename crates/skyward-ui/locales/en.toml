@@ -610,6 +610,8 @@ temporary = "Temporary folder"
 temporary_note = "/skyward/run/logs, which adb pull copies to a computer"
 folder = "The Skyward/logs folder"
 note = "Each export goes in a folder named by when it was made. A reboot empties the temporary folder."
+metadata = "Metadata partition"
+metadata_note = "/metadata/skyward, which the data partition being closed does not hide"
 export = "Export"
 
 [screenshot]

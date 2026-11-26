@@ -527,6 +527,8 @@ temporary = "暫存資料夾"
 temporary_note = "/skyward/run/logs，可透過 adb pull 匯出到電腦"
 folder = "Skyward/logs 資料夾"
 note = "每次匯出儲存在以匯出時間命名的資料夾中。重新啟動後將清空暫存資料夾。"
+metadata = "Metadata 磁區"
+metadata_note = "/metadata/skyward，資料分區加密時也能寫"
 export = "匯出"
 
 [screenshot]

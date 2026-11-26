@@ -542,6 +542,8 @@ temporary = "Временная папка"
 temporary_note = "/skyward/run/logs, откуда adb pull копирует на компьютер"
 folder = "Папка Skyward/logs"
 note = "Каждый экспорт сохраняется в папку, названную по времени его создания. При перезагрузке временная папка очищается."
+metadata = "Раздел metadata"
+metadata_note = "/metadata/skyward, даже когда раздел данных закрыт"
 export = "Экспорт"
 
 [screenshot]

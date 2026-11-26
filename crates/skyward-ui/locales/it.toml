@@ -537,6 +537,8 @@ temporary = "Cartella temporanea"
 temporary_note = "/skyward/run/logs, che adb pull copia su un computer"
 folder = "Cartella Skyward/logs"
 note = "Ogni esportazione va in una cartella che prende il nome dal momento in cui è stata fatta. Un riavvio svuota la cartella temporanea."
+metadata = "Partizione metadata"
+metadata_note = "/metadata/skyward, anche a dati chiusi"
 export = "Esporta"
 
 [screenshot]
