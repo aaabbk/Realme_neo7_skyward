@@ -231,19 +231,21 @@ impl Transfer {
             battery: Box::new(|| skyward_info::battery_now().ok().flatten().map(|b| b.level)),
         };
         let service = skyward_mtp::Service::start(device, zone.clone())?;
-        skyward_sys::usb::set_mtp(true);
         Ok(Transfer { service, offered: false, zone: zone.clone() })
     }
 
     /// Offer internal storage, named for the computer in `lang`, or take it
     /// back. Once this returns, nothing the computer had under way in it
-    /// goes on.
+    /// goes on. The port offers file transfer beside adb only while it is
+    /// offered: a port at rest that carries a function nothing serves is a
+    /// port a computer sees and cannot use.
     fn offer(&mut self, offer: bool, lang: Lang) -> Result<()> {
         if offer != self.offered {
             let description = skyward_ui::fmt::storage_name(lang).into();
             let storage = offer.then(|| skyward_mtp::Storage { top: PathBuf::from(skyward_crypto::data::SDCARD), description });
             self.service.offer(storage)?;
             self.offered = offer;
+            skyward_sys::usb::set_mtp(offer);
         }
         Ok(())
     }
@@ -2464,11 +2466,14 @@ impl Pages<'_> {
     /// erasing or installing could take it away. File transfer that does
     /// not follow, or whose service ended, stops, and the page says why.
     fn offer_storage(&mut self, now: u64) -> Result<()> {
+        let mut followed = false;
         let kept = match &mut self.transfer {
             Some(t) if !t.service.running() => Err(anyhow!("the file transfer service ended")),
             Some(t) => {
                 let offer = self.app.state.data.storage_open() && self.eraser.is_none() && self.installer.is_none();
-                t.offer(offer, self.app.state.lang).and_then(|()| {
+                let offered = t.offer(offer, self.app.state.lang);
+                followed = offered.is_ok();
+                offered.and_then(|()| {
                     if &t.zone != self.app.state.zone() {
                         t.zone = self.app.state.zone().clone();
                         t.service.set_zone(t.zone.clone())?;
@@ -2478,6 +2483,18 @@ impl Pages<'_> {
             }
             None => Ok(()),
         };
+        // The port offers file transfer beside adb while it is offered and
+        // goes back to adb alone when it is not: a function nothing serves
+        // is a port a computer sees and cannot use.
+        if followed
+            && !self.fastboot
+            && !self.sideloading
+            && !skyward_sys::usb::in_place(skyward_sys::usb::resting())
+            && let Err(e) = skyward_sys::usb::switch(skyward_sys::usb::resting(), USB_TIMEOUT)
+        {
+            skyward_sys::kmsg(&format!("the port did not take file transfer: {e:#}"))?;
+            self.app.report(&format!("{e:#}"), now);
+        }
         if let Err(e) = kept {
             // An ended service's own error says more than its ending does.
             let why = match self.transfer.take().expect("only file transfer that runs fails").stop(!self.fastboot && !self.sideloading) {

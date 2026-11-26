@@ -6,7 +6,9 @@ on fs && property:sys.usb.configfs=1
     mkdir /dev/usb-ffs/mtp 0770 root root
     mount functionfs mtp /dev/usb-ffs/mtp rmode=0770,fmode=0660,uid=0,gid=0
 
-on property:sys.usb.config=mtp,adb && property:sys.usb.config_disable=0
+# adbd is started for every configuration it is part of: its function has
+# no descriptors until it runs, and the port binds with the function on it.
+on property:sys.usb.config=mtp,adb
     start adbd
 
 on property:sys.usb.config=mtp,adb && property:sys.usb.ffs.ready=1 && property:sys.usb.ffs.mtp.ready=1 && property:sys.usb.configfs=1

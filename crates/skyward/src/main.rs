@@ -771,6 +771,9 @@ fn recovery() -> Result<()> {
             Ok(name) => skyward_sys::kmsg(&format!("the port is bound to {name} by the recovery"))?,
             Err(e) => skyward_sys::kmsg(&format!("the port is not given to adb: {e:#}"))?,
         }
+        // What the port is doing, as the kernel has it: a computer that finds
+        // nothing is told apart from one the phone never bound its port for.
+        skyward_sys::kmsg(&format!("the port a computer reaches: {}", skyward_sys::usb::describe()))?;
         let misc = bcb::misc();
         let message = bcb::read(&misc)?;
         let request = message.request();
