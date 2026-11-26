@@ -4,8 +4,15 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Where the phone's own partitions keep the table.
-pub const FILES: [&str; 2] = ["/vendor/etc/fstab.qcom", "/odm/etc/fstab.qcom"];
+/// Where the phone's own partitions keep the table, by the platform it is
+/// named for: Qualcomm's, and MediaTek's, which names the chip it was built
+/// for.
+pub const FILES: [&str; 4] =
+    ["/vendor/etc/fstab.qcom", "/odm/etc/fstab.qcom", "/vendor/etc/fstab.mt6989", "/odm/etc/fstab.mt6989"];
+
+/// Tables a phone keeps beside its own that are not what it mounts: the
+/// emmc's own, and the switch of its swap.
+const IGNORED: [&str; 2] = ["fstab.emmc", "fstab.enableswap"];
 
 /// One filesystem the phone knows about.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,14 +58,36 @@ pub fn entries(text: &str) -> Vec<Entry> {
     out
 }
 
+/// The tables the phone carries: the ones its platform names, and then any
+/// other it keeps, as a phone built on a platform this build does not know
+/// is found by its own table.
+fn files() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = FILES.iter().map(PathBuf::from).collect();
+    for folder in ["/vendor/etc", "/odm/etc"] {
+        let Ok(entries) = std::fs::read_dir(folder) else { continue };
+        let mut others: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                name.starts_with("fstab.") && !IGNORED.contains(&name.as_str())
+            })
+            .filter(|p| !out.contains(p))
+            .collect();
+        others.sort();
+        out.extend(others);
+    }
+    out
+}
+
 /// Every entry of the phone's own table, read from wherever the table is.
 fn table() -> Result<Vec<Entry>> {
     let mut out = Vec::new();
-    for file in FILES {
-        let text = match std::fs::read_to_string(file) {
+    for file in files() {
+        let text = match std::fs::read_to_string(&file) {
             Ok(text) => text,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e).with_context(|| format!("read {file}")),
+            Err(e) => return Err(e).with_context(|| format!("read {}", file.display())),
         };
         out.extend(entries(&text));
     }
@@ -165,5 +194,28 @@ mod tests {
     fn comments_and_short_lines_are_passed_over() {
         assert!(entries("# nothing\n\n/dev/x /y f2fs rw\n").is_empty());
         assert_eq!(entries(TABLE).len(), 3);
+    }
+
+    #[test]
+    fn the_table_of_a_mediatek_phone_is_read_and_its_partition_named() {
+        let table = "\
+/dev/block/by-name/metadata /metadata f2fs noatime wait,check,formattable,first_stage_mount
+/dev/block/by-name/persist /mnt/vendor/persist ext4 noatime,nosuid wait,check,formattable
+/dev/block/by-name/userdata /data f2fs noatime wait,check,fileencryption=aes-256-xts:aes-256-cts:v2
+";
+        let read = entries(table);
+        assert_eq!(read.len(), 3);
+        let persist = &read[1];
+        assert_eq!((persist.mount_point.as_str(), persist.filesystem.as_str()), ("/mnt/vendor/persist", "ext4"));
+        assert!(names(persist, "persist"));
+        assert_eq!(persist.extra("fileencryption"), None, "another partition's extras are not this one's");
+        assert_eq!(read[2].extra("fileencryption"), Some("aes-256-xts:aes-256-cts:v2"));
+    }
+
+    #[test]
+    fn the_tables_a_phone_carries_are_the_platforms_first() {
+        assert!(FILES.contains(&"/vendor/etc/fstab.mt6989"), "a MediaTek phone's table is looked for");
+        assert!(FILES.contains(&"/odm/etc/fstab.mt6989"), "where the odm partition keeps it");
+        assert!(!IGNORED.contains(&"fstab.mt6989"), "the phone's own table is not passed over");
     }
 }

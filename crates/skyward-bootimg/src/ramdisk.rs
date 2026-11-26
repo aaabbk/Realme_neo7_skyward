@@ -54,8 +54,14 @@ impl Ramdisk {
     pub fn decode(compressed: &[u8]) -> Result<Self> {
         let mut cpio = Vec::new();
         lz4_flex::frame::FrameDecoder::new(compressed).read_to_end(&mut cpio).context("lz4 decode")?;
+        Self::parse(&cpio)
+    }
+
+    /// Read a newc archive that is not compressed, as a `vendor_boot`'s
+    /// fragment holds once its LZ4 frame is unpacked.
+    pub fn parse(cpio: &[u8]) -> Result<Self> {
         let mut entries = Vec::new();
-        let mut rest = Cursor::new(cpio.as_slice());
+        let mut rest = Cursor::new(cpio);
         loop {
             let mut r = NewcReader::new(rest).context("cpio entry")?;
             if r.entry().is_trailer() {

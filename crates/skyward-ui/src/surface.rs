@@ -528,16 +528,18 @@ pub mod kms {
                 }
             }
             let conn = panel.ok_or_else(|| anyhow!("no connected built-in panel"))?;
-            let preferred = conn
-                .modes()
+            // The mode the panel prefers; a panel whose driver names none,
+            // as MediaTek's, is taken at its largest.
+            let modes = conn.modes();
+            let preferred = modes
                 .iter()
                 .find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED))
-                .ok_or_else(|| anyhow!("the panel reports no preferred mode"))?;
+                .or_else(|| modes.iter().max_by_key(|m| u64::from(m.size().0) * u64::from(m.size().1)))
+                .ok_or_else(|| anyhow!("the panel reports no mode"))?;
             // The fastest refresh at the preferred size, the first listed among
             // equals: Android scrolls at it, and the 13 Ultra's touch reports
             // come at the same 120 Hz.
-            let mode = *conn
-                .modes()
+            let mode = *modes
                 .iter()
                 .filter(|m| m.size() == preferred.size())
                 .rev()

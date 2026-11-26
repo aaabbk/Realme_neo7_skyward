@@ -92,18 +92,7 @@ struct Backlight {
 
 impl Backlight {
     fn open() -> Result<Self> {
-        let mut dirs: Vec<PathBuf> = fs::read_dir("/sys/class/backlight")
-            .context("read /sys/class/backlight")?
-            .map(|e| e.map(|e| e.path()))
-            .collect::<std::io::Result<_>>()?;
-        dirs.sort();
-        // Qualcomm panels expose panel0-backlight; take it when present.
-        let dir = dirs
-            .iter()
-            .find(|d| d.file_name().is_some_and(|n| n == "panel0-backlight"))
-            .or(dirs.first())
-            .ok_or_else(|| anyhow!("no backlight device"))?
-            .clone();
+        let dir = backlight_dir()?;
         let read = |name: &str| -> Result<u32> {
             fs::read_to_string(dir.join(name))
                 .with_context(|| format!("read {}/{name}", dir.display()))?
@@ -111,7 +100,7 @@ impl Backlight {
                 .parse()
                 .with_context(|| format!("parse {name}"))
         };
-        let top = normal_max(read("max_brightness")?)?;
+        let top = normal_max(read("max_brightness")?);
         let level = read("brightness")?;
         Ok(Backlight { path: dir.join("brightness"), top, level })
     }
@@ -144,11 +133,43 @@ const NORMAL_MAX: [(&str, &str); 3] = [
     ("mi,mdss-dsi-fac-bl-max-level", "qcom,mdss-dsi-bl-max-level"),
 ];
 
+/// Where the panel's backlight is. Qualcomm's display driver keeps it in
+/// the backlight class, and names the panel's own panel0-backlight;
+/// MediaTek's keeps it among its LEDs, as lcd-backlight.
+fn backlight_dir() -> Result<PathBuf> {
+    let mut dirs: Vec<PathBuf> = fs::read_dir("/sys/class/backlight")
+        .map(|entries| entries.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default();
+    dirs.sort();
+    if let Some(dir) = dirs.iter().find(|d| d.file_name().is_some_and(|n| n == "panel0-backlight")).or_else(|| dirs.first()) {
+        return Ok(dir.clone());
+    }
+    for name in ["lcd-backlight", "lcd-backlight1"] {
+        let dir = Path::new("/sys/class/leds").join(name);
+        if dir.join("brightness").is_file() {
+            return Ok(dir);
+        }
+    }
+    Err(anyhow!("no backlight device: neither /sys/class/backlight nor /sys/class/leds/lcd-backlight"))
+}
+
 /// The raw backlight level, out of `max`, at the panel's normal maximum.
 /// Above it the panel runs in high brightness mode, which the stock system
-/// keeps for strong sunlight and its slider does not reach. The panel the
-/// display driver booted with gives that maximum in the device tree.
-fn normal_max(max: u32) -> Result<u32> {
+/// keeps for strong sunlight and its slider does not reach. A panel whose
+/// driver does not say, as on MediaTek's, has the whole range as its own.
+fn normal_max(max: u32) -> u32 {
+    match panel_normal_max() {
+        Ok((normal, full)) => (f64::from(max) * f64::from(normal) / f64::from(full)).round() as u32,
+        Err(e) => {
+            eprintln!("backlight: the panel's normal maximum is not given, {e:#}; the whole range is the slider's");
+            max
+        }
+    }
+}
+
+/// The panel's normal maximum out of the whole range its driver gives,
+/// both as the node of the panel the display driver booted with says.
+fn panel_normal_max() -> Result<(u32, u32)> {
     let param = "/sys/module/msm_drm/parameters/dsi_display0";
     let boot = fs::read_to_string(param).with_context(|| format!("read {param}"))?;
     // The panel's node, then its configuration after a colon, as in
@@ -175,7 +196,7 @@ fn normal_max(max: u32) -> Result<u32> {
         .with_context(|| format!("panel {name} gives its normal maximum as none of {NORMAL_MAX:?}"))?;
     let (normal, full) = (cell(normal)?, cell(full)?);
     ensure!(normal > 0 && normal <= full, "panel {name}: normal maximum {normal} out of {full}");
-    Ok((f64::from(max) * f64::from(normal) / f64::from(full)).round() as u32)
+    Ok((normal, full))
 }
 
 /// Leave recovery for the chosen target.

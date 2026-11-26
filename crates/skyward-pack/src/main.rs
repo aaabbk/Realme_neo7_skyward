@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+mod assemble;
 mod avb;
 mod described;
 
@@ -104,6 +105,48 @@ enum Cmd {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Build the recovery fragment of a phone's vendor_boot: a recovery of
+    /// our own, made of files taken out of the stock image's ramdisks, in
+    /// place of the phone maker's recovery. A phone without a recovery
+    /// partition keeps its recovery there, and its platform fragment, where
+    /// the kernel's modules and the first stage's table are, stays as it is.
+    VendorBoot {
+        /// The device's stock vendor_boot image, the whole partition as the
+        /// phone holds it, ending in its AVB footer.
+        #[arg(long)]
+        stock: PathBuf,
+        /// Skyward built for the device (aarch64-linux-android).
+        #[arg(long)]
+        binary: PathBuf,
+        /// The first program of a system installed beside the installed
+        /// one, skyward-system-init built for the device and linked
+        /// statically.
+        #[arg(long)]
+        system_init: PathBuf,
+        /// The device configuration, devices/<codename>.toml.
+        #[arg(long)]
+        config: PathBuf,
+        /// What the recovery is made of: devices/<codename>.recovery.toml.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// The rules init runs in this recovery.
+        #[arg(long = "init-rc")]
+        init_rc: PathBuf,
+        /// The USB function adb reaches the recovery on.
+        #[arg(long = "usb-rc")]
+        usb_rc: PathBuf,
+        /// The UI typeface.
+        #[arg(long)]
+        font: PathBuf,
+        /// The terminal's monospaced typeface.
+        #[arg(long)]
+        mono: PathBuf,
+        /// The monospaced typeface's licence, which goes with it.
+        #[arg(long)]
+        mono_license: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -171,6 +214,24 @@ fn main() -> Result<()> {
             img.ramdisk = rd.encode()?;
             let bytes = img.to_bytes()?;
             write(&out, &img, &avb::footed(&bytes, "recovery", size, &Sha256::digest(&bytes))?)
+        }
+        Cmd::VendorBoot { stock, binary, system_init, config, font, mono, mono_license, manifest, init_rc, usb_rc, out } => {
+            skyward_config::DeviceConfig::load(&config)?;
+            let built = assemble::build(&assemble::Recovery {
+                stock: &stock,
+                binary: &binary,
+                system_init: &system_init,
+                config: &config,
+                font: &font,
+                mono: &mono,
+                mono_license: &mono_license,
+                manifest: &manifest,
+                init_rc: &init_rc,
+                usb_rc: &usb_rc,
+            })?;
+            std::fs::write(&out, &built).with_context(|| format!("write {}", out.display()))?;
+            println!("wrote {} ({} bytes in all, the recovery fragment replaced)", out.display(), built.len());
+            Ok(())
         }
         Cmd::Stock { config, out } => {
             let stock = skyward_config::DeviceConfig::load(&config)?.stock.with_context(|| format!("{} names no stock build", config.display()))?;

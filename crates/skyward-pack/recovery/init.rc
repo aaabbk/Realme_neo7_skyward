@@ -1,0 +1,99 @@
+# The rules init runs in a recovery of our own, in place of the phone
+# maker's: the phone's own recovery, its own programs and the scripts that
+# start them have no part here. What the recovery starts is Skyward, and
+# what it needs to be reached from a computer: adb.
+#
+# The files this recovery is made of are the ones a manifest names, taken
+# out of the phone's stock vendor_boot and put in by skyward-pack
+# vendor-boot; see devices/<codename>.recovery.toml.
+
+import /system/etc/init/skyward-usb.rc
+import /system/etc/init/skyward-mtp.rc
+
+on early-init
+    start ueventd
+    setprop sys.usb.configfs 1
+
+    # The kernel stops a recovery that panics, as the phone's own does.
+    write /proc/sys/kernel/panic_on_oops 1
+    write /proc/sys/vm/max_map_count 1000000
+
+on init
+    export PATH /sbin:/system/bin
+    export ANDROID_ROOT /system
+    export ANDROID_DATA /data
+    export EXTERNAL_STORAGE /sdcard
+    export LD_LIBRARY_PATH .:/sbin
+
+    symlink /proc/self/fd/0 /dev/stdin
+    symlink /proc/self/fd/1 /dev/stdout
+    symlink /proc/self/fd/2 /dev/stderr
+    symlink /system/etc /etc
+
+    mkdir /dev/binderfs
+    mount binder binder /dev/binderfs stats=global
+    chmod 0755 /dev/binderfs
+    symlink /dev/binderfs/binder /dev/binder
+    symlink /dev/binderfs/hwbinder /dev/hwbinder
+    symlink /dev/binderfs/vndbinder /dev/vndbinder
+    chmod 0666 /dev/binderfs/binder
+    chmod 0666 /dev/binderfs/hwbinder
+    chmod 0666 /dev/binderfs/vndbinder
+
+    mount cgroup none /acct cpuacct
+    mkdir /acct/uid
+
+    mkdir /sdcard
+    mkdir /system
+    mkdir /data
+    mkdir /cache
+    mkdir /sideload
+    mkdir /mnt/system
+    mount tmpfs tmpfs /tmp size=80%
+    chown root shell /tmp
+    chmod 0775 /tmp
+
+on fs
+    # The recovery works as root on the phone's own partitions, and the
+    # policy the phone ships is not written for it: nothing is refused, as
+    # in the recovery the phone maker ships.
+    setenforce 0
+
+    # Where the pages keep their settings between starts, which Skyward
+    # reads before the phone's own table is read: only the folder is made.
+    mkdir /metadata 0770 system system
+
+on late-init
+    trigger early-fs
+    trigger fs
+    trigger post-fs
+    trigger post-fs-data
+    trigger load_system_props_action
+    trigger load_persist_props_action
+    trigger firmware_mounts_complete
+    trigger early-boot
+    trigger boot
+
+on boot
+    class_start default
+    # A computer is given the recovery over adb from the start, as in the
+    # recovery the phone maker ships.
+    setprop sys.usb.config adb
+
+service ueventd /system/bin/ueventd
+    critical
+    seclabel u:r:recovery:s0
+
+service adbd /system/bin/adbd --root_seclabel=u:r:recovery:s0 --device_banner=recovery
+    disabled
+    socket adbd stream 660 system system
+    seclabel u:r:recovery:s0
+
+# The recovery itself: Skyward, which init starts with the socket the
+# recovery service is given, and starts again whenever it ends.
+service recovery /system/bin/recovery
+    class default
+    socket recovery stream 422 system system
+    seclabel u:r:recovery:s0
+    user root
+    group root system

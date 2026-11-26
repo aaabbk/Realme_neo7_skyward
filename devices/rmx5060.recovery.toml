@@ -1,0 +1,55 @@
+# What the recovery of our own on a Realme Neo7 (RMX5060) is made of: files
+# taken out of the phone's stock vendor_boot, the programs whose libraries
+# come with them, and the phone's own table of partitions, which a phone
+# whose super is empty would not have anywhere else.
+#
+# skyward-pack vendor-boot reads this, takes each file out of the stock
+# image's ramdisks, and writes them, with Skyward, into a recovery fragment
+# of its own. Nothing of the phone maker's recovery, no script of its and no
+# asset of its, is taken.
+
+# The programs the recovery starts and what reads its rules and policy.
+take = [
+    "system/bin/init",
+    "system/bin/ueventd",
+    "system/bin/adbd",
+    "system/bin/linker64",
+    "system/bin/toybox",
+    "system/bin/sh",
+    "sepolicy",
+    "plat_file_contexts",
+    "plat_property_contexts",
+    "plat_service_contexts",
+    "vendor_file_contexts",
+    "vendor_property_contexts",
+    "vendor_service_contexts",
+    "system_ext_file_contexts",
+    "system_ext_property_contexts",
+    "system_ext_service_contexts",
+]
+
+# Each of these is taken with every library it names, and theirs, so that a
+# recovery that starts has all of them: a program missing one does not run.
+closure = [
+    "system/bin/init",
+    "system/bin/adbd",
+    "system/bin/toybox",
+    "system/bin/sh",
+    # Skyward itself: its libraries are taken with it as any program's.
+    "system/bin/recovery",
+]
+
+# The recovery's adb needs no authorization, as the phone maker's recovery
+# has none: a cable and the phone are enough.
+prop_append = ["ro.adb.secure=0"]
+
+# The USB controller the phone's own rules bind the gadget to, from its
+# init.mt6989.usb.rc.
+udc = "11201000.usb0"
+
+# The phone's own table of partitions, which Skyward reads to mount what the
+# phone mounts where: from the vendor partition when the phone has a system,
+# and from here when it has none.
+[[host]]
+from = "devices/rmx5060/fstab.mt6989"
+to = "vendor/etc/fstab.mt6989"

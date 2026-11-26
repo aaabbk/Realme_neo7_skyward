@@ -1,0 +1,87 @@
+# Realme Neo7 (RMX5060), MediaTek Dimensity 9300+ (MT6989), Android 14
+# (SDK 34), A/B with virtual A/B. What the phone's own partitions said of
+# it, read from its vendor_boot, vendor and odm partitions:
+#
+#   ro.build.product=RMX5060, ro.product.vendor.device=ossi,
+#   ro.build.device_family=OPMT6989, ro.soc.model=MT6989, kernel 6.1.157,
+#   ro.sf.lcd_density=480, ro.virtual_ab.enabled=true.
+#
+# The phone has no recovery partition: its recovery is a ramdisk fragment of
+# vendor_boot, the one the fragment table names "recovery", the other being
+# the platform ramdisk every start takes. A recovery of our own is written
+# there, and what it is made of is devices/rmx5060.recovery.toml.
+#
+# Nothing here is on the phone's super: the recovery is made to start with
+# super empty, as it is after a wipe, so every program and library it runs
+# is in the recovery ramdisk itself, and the kernel's modules, which are in
+# the image's platform fragment, are loaded by the first stage before this
+# program runs.
+
+[device]
+# What Skyward's own images and releases are named by. The vendor partition
+# names the phone ossi; the file and this name follow the model number the
+# phone is sold under, and only have to agree with each other.
+codename = "rmx5060"
+brand = "realme"
+model = "RMX5060"
+ab = true
+soc = { hans = "联发科 天玑 9300+", hant = "聯發科 天璣 9300+", en = "MediaTek Dimensity 9300+" }
+# ro.build.display.id in the odm partition, RMX5060_11_A.01.
+os_version_prop = "ro.build.display.id"
+
+[display]
+# The panel's own mode, from the display configuration the vendor partition
+# keeps, and ro.sf.lcd_density.
+width = 1264
+height = 2780
+density = 480
+diagonal = 6.78
+# TODO: the radius the stock system rounds a page's corners to, from its own
+# devices overlay; unknown until read on the phone.
+
+[modules]
+# The recovery ramdisk of vendor_boot carries the kernel's modules and the
+# first stage loads those a recovery takes, from its own modules.load.recovery:
+# the touchscreen's oplus_bsp_synaptics_tcm2, the display's mediatek-drm and
+# panel modules and the motor's aw8697 among them. Nothing has to be loaded
+# here, and nothing here is on a partition the phone may not have.
+sources = ["vendor_boot"]
+load = []
+
+# TODO: [touch]. The panel is Synaptics TouchComm over SPI behind OPPO's
+# touch layer, driven by oplus_bsp_synaptics_tcm2, which the recovery
+# already loads; whether it reports touches without OPPO's touchDaemon,
+# which is on the odm partition, is not yet tried on the phone. Nothing is
+# written until it is: the pages are worked with the keys meanwhile.
+
+# TODO: [haptics]. The motor is aw8697, whose driver the recovery loads.
+# Whether it takes the force-feedback effects a click is played through, and
+# the file it says its resonant frequency in, are not known.
+
+# TODO: [wlan], [update], [logd]: the WLAN's modules are in vendor_dlkm, its
+# firmware and its supplicant's libraries on the vendor partition, and the
+# logd that a recovery of our own carries needs none of the installed
+# system's libraries. None of them is made to work without super yet.
+
+# TODO: [partitions], [firmware]: nothing is mounted before Skyward runs.
+# The recovery mounts persist itself (the phone's own init.rc did), and the
+# table it reads is the one written into its own ramdisk at
+# vendor/etc/fstab.mt6989, which is the phone's own when the phone has a
+# vendor partition.
+
+# The baseband's settings, with the IMEI, and the sensors' calibration: the
+# two NVRAM partitions, the two the phone's own calibration keeps, and
+# persist, where the secure world and the WLAN's MAC address are. All of
+# them are partitions of their own, not of super.
+[backup]
+efs = ["nvdata", "nvcfg", "protect1", "protect2", "persist"]
+# TODO: what of the data partition the secure world keeps in step with
+# itself: an older copy written back would not open. Not yet read on the
+# phone.
+
+# TODO: [wipe] logs, where OPPO's own programs keep theirs in the data
+# partition. Not yet read on the phone.
+
+# No [stock]: there is no recovery partition to take out of a package, and
+# a vendor_boot is not built from one. skyward-pack vendor-boot is given the
+# phone's own vendor_boot image instead.

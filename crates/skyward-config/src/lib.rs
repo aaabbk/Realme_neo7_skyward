@@ -796,6 +796,28 @@ mod tests {
     }
 
     #[test]
+    fn rmx5060_needs_nothing_of_the_phones_super() {
+        let cfg = DeviceConfig::parse(include_str!("../../../devices/rmx5060.toml")).unwrap();
+        assert_eq!(cfg.device.codename, "rmx5060");
+        assert_eq!(cfg.device.model, "RMX5060");
+        assert_eq!(cfg.device.os_version_prop, "ro.build.display.id");
+        assert_eq!((cfg.display.width, cfg.display.height, cfg.display.density), (1264, 2780, 480));
+        assert_eq!(cfg.display.diagonal, Some(6.78));
+        assert_eq!(cfg.modules.sources, ["vendor_boot"], "the kernel's modules are the image's own");
+        assert!(cfg.modules.load.is_empty(), "the first stage loads the modules a recovery takes already");
+        assert_eq!(cfg.backup.efs, ["nvdata", "nvcfg", "protect1", "protect2", "persist"]);
+        // The recovery is made to start with super empty: no program of the
+        // phone's vendor or odm partition is started, no partition of super is
+        // mounted, and none of its files is read before the pages come up.
+        assert!(cfg.services.is_empty(), "no program of super is started");
+        assert!(cfg.firmware.is_none(), "nothing of the modem partition is reached");
+        assert!(cfg.partitions.mounted.is_empty(), "nothing of super is mounted");
+        assert!(cfg.logd.is_none() && cfg.wlan.is_none() && cfg.update.is_none(), "none of them without super");
+        assert!(cfg.stock.is_none(), "a vendor_boot is not built from a package");
+        assert!(cfg.haptics.is_none() && cfg.owners.is_empty() && cfg.wipe.logs.is_empty());
+    }
+
+    #[test]
     fn each_phone_names_the_stock_build_its_recovery_is_made_on() {
         for (text, version) in [
             (include_str!("../../../devices/nezha.toml"), "OS4.0.4.0.XPACNXM"),
