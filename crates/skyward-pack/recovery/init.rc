@@ -7,21 +7,15 @@
 # out of the phone's stock vendor_boot and put in by skyward-pack
 # vendor-boot; see devices/<codename>.recovery.toml.
 
-import /system/etc/init/skyward-usb.rc
-import /system/etc/init/skyward-mtp.rc
-
 on early-init
     start ueventd
-    # The key service registers with this one, as the phone's own AIDL
-    # services do; a recovery that cannot open the data partition still
-    # works without it, so a failure here goes no further.
-    start servicemanager
     setprop sys.usb.configfs 1
 
     # The recovery works as root on the phone's own partitions, and the
-    # policy the phone ships is not written for it: nothing is refused while
-    # the port is young. Set again once the policy is in, below.
-    setenforce 0
+    # policy the phone ships is not written for it: nothing is refused.
+    # Init as this phone ships it has no `setenforce` of its own, so the
+    # policy is opened the way the kernel opens it.
+    write /sys/fs/selinux/enforce 0
 
     # The kernel stops a recovery that panics, as the phone's own does.
     write /proc/sys/kernel/panic_on_oops 1
@@ -39,16 +33,6 @@ on init
     symlink /proc/self/fd/2 /dev/stderr
     symlink /system/etc /etc
 
-    mkdir /dev/binderfs
-    mount binder binder /dev/binderfs stats=global
-    chmod 0755 /dev/binderfs
-    symlink /dev/binderfs/binder /dev/binder
-    symlink /dev/binderfs/hwbinder /dev/hwbinder
-    symlink /dev/binderfs/vndbinder /dev/vndbinder
-    chmod 0666 /dev/binderfs/binder
-    chmod 0666 /dev/binderfs/hwbinder
-    chmod 0666 /dev/binderfs/vndbinder
-
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
 
@@ -62,11 +46,33 @@ on init
     chown root shell /tmp
     chmod 0775 /tmp
 
+    # Binder comes before anything that speaks over it, as the phone's own
+    # recovery puts it: the directory the phone's own services register
+    # with, and the key service that registers there when the data
+    # partition is to be opened. A program that finds no binder where it
+    # looks ends at once, and init then starts it again to have it end
+    # again; the directory a recovery carries no binder at all is started
+    # once this is mounted, and not before.
+    mkdir /dev/binderfs
+    mount binder binder /dev/binderfs stats=global
+    chmod 0755 /dev/binderfs
+    symlink /dev/binderfs/binder /dev/binder
+    symlink /dev/binderfs/hwbinder /dev/hwbinder
+    symlink /dev/binderfs/vndbinder /dev/vndbinder
+    chmod 0666 /dev/binderfs/binder
+    chmod 0666 /dev/binderfs/hwbinder
+    chmod 0666 /dev/binderfs/vndbinder
+
+    # The key service registers with this one, as the phone's own AIDL
+    # services do; a recovery that cannot open the data partition still
+    # works without it, so a failure here goes no further.
+    start servicemanager
+
 on fs
     # The recovery works as root on the phone's own partitions, and the
     # policy the phone ships is not written for it: nothing is refused, as
     # in the recovery the phone maker ships.
-    setenforce 0
+    write /sys/fs/selinux/enforce 0
 
     # Where the pages keep their settings between starts, which Skyward
     # reads before the phone's own table is read: only the folder is made.
@@ -89,11 +95,16 @@ on boot
     # recovery the phone maker ships.
     setprop sys.usb.config adb
 
+# The directory the phone's own services register with, started as the
+# phone's own recovery starts it: as root, in the recovery's own domain,
+# which is the only one the policy a recovery carries gives a program.
 service servicemanager /system/bin/servicemanager
     class core
-    user system
-    group system
-    seclabel u:r:servicemanager:s0
+    user root
+    group system readproc
+    seclabel u:r:recovery:s0
+    # What it says of why it ends, where a recovery has no logd to take it.
+    stdio_to_kmsg
 
 service ueventd /system/bin/ueventd
     critical
