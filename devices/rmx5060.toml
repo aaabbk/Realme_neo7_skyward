@@ -60,9 +60,13 @@ load = ["mcDrvModule-ffa"]
 # which is on the odm partition, is not yet tried on the phone. Nothing is
 # written until it is: the pages are worked with the keys meanwhile.
 
-# TODO: [haptics]. The motor is aw8697, whose driver the recovery loads.
-# Whether it takes the force-feedback effects a click is played through, and
-# the file it says its resonant frequency in, are not known.
+# The motor has no input device of its own: /proc/bus/input/devices names no
+# force-feedback device. It is the kernel's LEDs class, as MediaTek's
+# regulator-vibrator and the Awinic drivers leave it, with the length of a
+# run, its strength and its switch in these files; max_brightness is 255.
+[haptics]
+vibrator = { dir = "/sys/class/leds/vibrator", duration = "oplus_duration", brightness = "oplus_brightness", activate = "oplus_activate", click_ms = 25, tick_ms = 8 }
+strength = { lightest = 0.25, strongest = 1.0 }
 
 # TODO: [wlan], [update], [logd]: the WLAN's modules are in vendor_dlkm, its
 # firmware and its supplicant's libraries on the vendor partition, and the

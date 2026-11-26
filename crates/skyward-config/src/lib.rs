@@ -1,4 +1,4 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -219,8 +219,14 @@ pub struct Haptics {
     #[serde(default)]
     pub click: Option<i16>,
     /// The file the driver says the motor's resonant frequency in, in
-    /// tenths of a hertz whatever its label.
-    pub resonance: String,
+    /// tenths of a hertz whatever its label, on phones whose motor plays
+    /// force-feedback effects.
+    #[serde(default)]
+    pub resonance: Option<String>,
+    /// The motor as the kernel's LEDs class drives it, on phones whose motor
+    /// takes no force-feedback effects: a length, a strength and a switch.
+    #[serde(default)]
+    pub vibrator: Option<Vibrator>,
     pub strength: Strength,
     /// Whether the strength goes into the samples made, each made that
     /// share of itself and played at the driver's full magnitude, on
@@ -228,6 +234,50 @@ pub struct Haptics {
     /// magnitude between none and the full one it is given.
     #[serde(default)]
     pub scale_samples: bool,
+}
+
+/// A motor the kernel's LEDs class drives, as MediaTek's regulator-vibrator
+/// and the Awinic drivers do: the files a run's length, its strength and its
+/// start are written to, and how long a click and a tick last.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Vibrator {
+    /// The folder the motor's files are in, as /sys/class/leds/vibrator is.
+    pub dir: String,
+    /// The file its run's length is written to, in milliseconds.
+    #[serde(default = "default_duration")]
+    pub duration: String,
+    /// The file its strength is written to, out of the driver's maximum.
+    #[serde(default = "default_brightness_file")]
+    pub brightness: String,
+    /// The file that starts the run, written 1 and then 0.
+    #[serde(default = "default_activate")]
+    pub activate: String,
+    /// How long a click of the slider lasts, in milliseconds.
+    #[serde(default = "default_click_ms")]
+    pub click_ms: u32,
+    /// How long a tick of the screen going off lasts, in milliseconds.
+    #[serde(default = "default_tick_ms")]
+    pub tick_ms: u32,
+}
+
+fn default_duration() -> String {
+    "duration".into()
+}
+
+fn default_brightness_file() -> String {
+    "brightness".into()
+}
+
+fn default_activate() -> String {
+    "activate".into()
+}
+
+fn default_click_ms() -> u32 {
+    25
+}
+
+fn default_tick_ms() -> u32 {
+    8
 }
 
 /// How strongly the click plays, each as a share of the most its waveform
@@ -560,13 +610,23 @@ impl DeviceConfig {
             ensure!(plain && !folder.is_empty(), "[backup] data_skipped: {folder} is not a path from the top of {DATA}");
         }
         if let Some(haptics) = &cfg.haptics {
-            let file = &haptics.resonance;
-            ensure!(Path::new(file).is_absolute(), "[haptics] resonance: {file} is not an absolute path");
             let Strength { lightest, strongest } = haptics.strength;
             ensure!(
                 0.0 < lightest && lightest < strongest && strongest <= 1.0,
                 "[haptics] strength: {lightest} and {strongest} are not shares rising from above 0 to at most 1"
             );
+            match (&haptics.vibrator, &haptics.resonance) {
+                (Some(vibrator), _) => {
+                    let dir = Path::new(&vibrator.dir);
+                    ensure!(dir.is_absolute(), "[haptics] vibrator: {} is not an absolute path", vibrator.dir);
+                    for name in [&vibrator.duration, &vibrator.brightness, &vibrator.activate] {
+                        ensure!(!name.is_empty() && !name.contains('/'), "[haptics] vibrator: {name:?} is not a file's name");
+                    }
+                    ensure!(vibrator.click_ms > 0 && vibrator.tick_ms > 0, "[haptics] vibrator: a run lasts no time");
+                }
+                (None, Some(resonance)) => ensure!(Path::new(resonance).is_absolute(), "[haptics] resonance: {resonance} is not an absolute path"),
+                (None, None) => bail!("[haptics] names neither a resonance nor a vibrator: no motor to play"),
+            }
         }
         if let Some(logd) = &cfg.logd {
             for library in &logd.libraries {
@@ -662,7 +722,7 @@ mod tests {
     fn ishtar_clicks_with_a_waveform_its_driver_keeps() {
         let cfg = DeviceConfig::parse(include_str!("../../../devices/ishtar.toml")).unwrap();
         let haptics = cfg.haptics.expect("the 13 Ultra has a motor");
-        assert_eq!((haptics.click, haptics.resonance.as_str()), (Some(0), "/sys/class/qcom-haptics/lra_frequency_hz"));
+        assert_eq!((haptics.click, haptics.resonance.as_deref()), (Some(0), Some("/sys/class/qcom-haptics/lra_frequency_hz")));
         assert_eq!(haptics.strength, Strength { lightest: 0.5, strongest: 1.0 });
         assert!(!haptics.scale_samples, "its strength is the magnitude its driver is given");
     }
@@ -671,7 +731,7 @@ mod tests {
     fn socrates_clicks_with_samples_made_as_strong_as_the_slider_says() {
         let cfg = DeviceConfig::parse(include_str!("../../../devices/socrates.toml")).unwrap();
         let haptics = cfg.haptics.expect("the K60 Pro has a motor");
-        assert_eq!((haptics.click, haptics.resonance.as_str()), (None, "/sys/class/qcom-haptics/lra_frequency_hz"));
+        assert_eq!((haptics.click, haptics.resonance.as_deref()), (None, Some("/sys/class/qcom-haptics/lra_frequency_hz")));
         assert_eq!(haptics.strength, Strength { lightest: 0.15, strongest: 1.0 });
         assert!(haptics.scale_samples, "its driver plays samples at two strengths alone");
     }
@@ -738,7 +798,7 @@ mod tests {
         assert_eq!(post_boot.args, ["/vendor/bin/init.kernel.post_boot.sh"]);
         assert_eq!(post_boot.libraries, ["/system/lib64", "/vendor/lib64"], "it loads the recovery's own libraries first");
         let haptics = cfg.haptics.expect("the 17 Ultra has a motor");
-        assert_eq!((haptics.click, haptics.resonance.as_str()), (None, "/sys/class/qcom-haptics/lra_frequency_hz"), "its click is made");
+        assert_eq!((haptics.click, haptics.resonance.as_deref()), (None, Some("/sys/class/qcom-haptics/lra_frequency_hz")), "its click is made");
         assert_eq!(haptics.strength, Strength { lightest: 0.25, strongest: 0.75 }, "past three quarters the motor rattles");
         assert_eq!(cfg.backup.efs, ["modemst1", "modemst2", "fsg", "fsc", "persist"]);
         assert!(cfg.backup.data_skipped.contains(&"vendor/goodix".to_string()));
@@ -827,7 +887,11 @@ mod tests {
         assert!(cfg.firmware.is_none(), "nothing of the modem partition is reached");
         assert!(cfg.logd.is_none() && cfg.wlan.is_none() && cfg.update.is_none(), "none of them without super");
         assert!(cfg.stock.is_none(), "a vendor_boot is not built from a package");
-        assert!(cfg.haptics.is_none() && cfg.owners.is_empty() && cfg.wipe.logs.is_empty());
+        // The motor is the kernel's own, in the files the kernel makes for it.
+        let haptics = cfg.haptics.as_ref().expect("the motor is the kernel's LEDs class");
+        assert_eq!(haptics.vibrator.as_ref().map(|v| v.dir.as_str()), Some("/sys/class/leds/vibrator"));
+        assert!(haptics.resonance.is_none(), "nothing of the phone's system names its frequency");
+        assert!(cfg.owners.is_empty() && cfg.wipe.logs.is_empty());
     }
 
     #[test]

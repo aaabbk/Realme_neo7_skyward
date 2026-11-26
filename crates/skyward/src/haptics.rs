@@ -5,7 +5,7 @@ use skyward_config::Strength;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -29,7 +29,7 @@ const TICKS_REST: Duration = Duration::from_millis(40);
 /// playing after its samples have run out, even when told to stop, until
 /// the click is taken away. So each click is loaded as it is played, at the
 /// strength the slider gives, and taken away once it has played out.
-pub struct Haptics {
+pub struct Effects {
     dev: File,
     click: Click,
     ticks: Click,
@@ -52,13 +52,14 @@ enum Click {
     Samples { data: Vec<i8>, rate: u32 },
 }
 
-impl Haptics {
+impl Effects {
     /// The force-feedback device and the configured click. Loading a click
     /// fills the driver's queue with what it plays, so the click is loaded
     /// only as it is played.
-    pub fn open(cfg: &skyward_config::Haptics) -> Result<Haptics> {
+    fn open(cfg: &skyward_config::Haptics) -> Result<Effects> {
         let (path, dev) = motor()?;
-        let hz = resonance(&cfg.resonance)?;
+        let file = cfg.resonance.as_deref().context("the motor's resonant frequency is not named")?;
+        let hz = resonance(file)?;
         let click = match cfg.click {
             Some(id) => {
                 eprintln!("haptics {}: clicks with waveform {id}, ticks made for a motor swinging at {hz} Hz", path.display());
@@ -70,7 +71,7 @@ impl Haptics {
             }
         };
         let ticks = Click::Samples { data: ticks(hz), rate: TICKS_RATE };
-        Ok(Haptics { dev, click, ticks, strength: cfg.strength, scale_samples: cfg.scale_samples, playing: Arc::new(Mutex::new(None)), clicks: 0 })
+        Ok(Effects { dev, click, ticks, strength: cfg.strength, scale_samples: cfg.scale_samples, playing: Arc::new(Mutex::new(None)), clicks: 0 })
     }
 
     /// One short click at the strength the slider's `position` gives, after
@@ -115,6 +116,130 @@ impl Haptics {
             }
         });
         Ok(length)
+    }
+}
+
+/// The phone's motor, either as the kernel's force-feedback effects drive
+/// it or as its LEDs class does.
+pub enum Haptics {
+    Effects(Effects),
+    Leds(Leds),
+}
+
+impl Haptics {
+    pub fn open(cfg: &skyward_config::Haptics) -> Result<Haptics> {
+        match &cfg.vibrator {
+            Some(vibrator) => Ok(Haptics::Leds(Leds::open(vibrator, cfg.strength)?)),
+            None => Ok(Haptics::Effects(Effects::open(cfg)?)),
+        }
+    }
+
+    /// One short click at the strength the slider's `position` gives. Gives
+    /// how long it plays.
+    pub fn click(&mut self, position: f32) -> Result<Duration> {
+        match self {
+            Haptics::Effects(effects) => effects.click(position),
+            Haptics::Leds(leds) => leds.click(position),
+        }
+    }
+
+    /// The ticks of the screen going off, as strong as the phone's own
+    /// system plays them whatever the slider says.
+    pub fn ticks(&mut self) -> Result<Duration> {
+        match self {
+            Haptics::Effects(effects) => effects.ticks(),
+            Haptics::Leds(leds) => leds.ticks(),
+        }
+    }
+}
+
+/// A motor the kernel's LEDs class drives, as MediaTek's regulator-vibrator
+/// and the Awinic drivers leave it: a run is a length, a strength and a
+/// switch, and it is told to stop once the length is up, as a driver that
+/// keeps the motor running on would leave it going.
+pub struct Leds {
+    duration: PathBuf,
+    brightness: PathBuf,
+    activate: PathBuf,
+    /// The strength the driver drives the motor at in full.
+    max: u32,
+    click: Duration,
+    tick: Duration,
+    strength: Strength,
+    /// The run playing, by its count, until it is stopped; one stopped early
+    /// by the next is not stopped again.
+    playing: Arc<Mutex<Option<u64>>>,
+    count: u64,
+}
+
+impl Leds {
+    fn open(cfg: &skyward_config::Vibrator, strength: Strength) -> Result<Leds> {
+        let dir = Path::new(&cfg.dir);
+        let file = dir.join("max_brightness");
+        let text = fs::read_to_string(&file).with_context(|| format!("read {}", file.display()))?;
+        let max: u32 = text.trim().parse().with_context(|| format!("{} holds {text:?}", file.display()))?;
+        ensure!(max > 0, "{} drives the motor at no strength", file.display());
+        let leds = Leds {
+            duration: dir.join(&cfg.duration),
+            brightness: dir.join(&cfg.brightness),
+            activate: dir.join(&cfg.activate),
+            max,
+            click: Duration::from_millis(u64::from(cfg.click_ms)),
+            tick: Duration::from_millis(u64::from(cfg.tick_ms)),
+            strength,
+            playing: Arc::new(Mutex::new(None)),
+            count: 0,
+        };
+        eprintln!(
+            "haptics {}: a click lasts {} ms, a tick {} ms, at up to {max}",
+            dir.display(),
+            cfg.click_ms,
+            cfg.tick_ms
+        );
+        leds.stop()?;
+        Ok(leds)
+    }
+
+    fn stop(&self) -> Result<()> {
+        fs::write(&self.activate, "0").with_context(|| format!("write 0 to {}", self.activate.display()))
+    }
+
+    fn click(&mut self, position: f32) -> Result<Duration> {
+        self.run(self.click, share(&self.strength, position))
+    }
+
+    fn ticks(&mut self) -> Result<Duration> {
+        self.run(self.tick, TICKS_STRENGTH)
+    }
+
+    /// Start the motor for `len` at `share` of the strength the slider's
+    /// top gives, and stop it once that has passed, whichever run it is by
+    /// then: the next one stops the one before it.
+    fn run(&mut self, len: Duration, share: f32) -> Result<Duration> {
+        let level = (f64::from(share.clamp(0.0, 1.0)) * f64::from(self.max)).round().max(1.0) as u32;
+        let write = |file: &Path, value: String| -> Result<()> {
+            fs::write(file, value).with_context(|| format!("write {}", file.display()))
+        };
+        write(&self.duration, len.as_millis().to_string())?;
+        write(&self.brightness, level.to_string())?;
+        write(&self.activate, "1".to_string())?;
+        self.count += 1;
+        let this = self.count;
+        *self.playing.lock().expect("no thread panics while it holds the run") = Some(this);
+        let (activate, playing) = (self.activate.clone(), self.playing.clone());
+        // Timed from now: a thread may wait a while before it first runs.
+        let until = Instant::now() + len;
+        std::thread::spawn(move || {
+            std::thread::sleep(until.saturating_duration_since(Instant::now()));
+            let mut playing = playing.lock().expect("no thread panics while it holds the run");
+            if *playing == Some(this) {
+                *playing = None;
+                if let Err(e) = fs::write(&activate, "0") {
+                    eprintln!("stop the motor: {e}");
+                }
+            }
+        });
+        Ok(len)
     }
 }
 
