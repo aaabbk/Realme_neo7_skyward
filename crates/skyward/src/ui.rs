@@ -206,7 +206,6 @@ fn power(target: Target) -> Result<()> {
         Target::Recovery => Power::Recovery,
         Target::Fastboot => Power::Fastboot,
         Target::Bootloader => Power::Bootloader,
-        Target::Edl => Power::Edl,
         Target::PowerOff => Power::Off,
     })
 }

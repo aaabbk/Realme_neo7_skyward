@@ -58,12 +58,29 @@ pub fn ensure(config: &str, timeout: Duration) -> Result<String> {
         return Ok(String::new());
     }
     // The function has to be there before the port is bound, as init binds it.
-    if prop("sys.usb.ffs.ready").as_deref() != Some("1") {
-        wait_prop("sys.usb.ffs.ready", "1", timeout)?;
+    let through_configfs = (|| -> Result<String> {
+        if prop("sys.usb.ffs.ready").as_deref() != Some("1") {
+            wait_prop("sys.usb.ffs.ready", "1", timeout)?;
+        }
+        let controller = bind()?;
+        wait_prop("sys.usb.state", config, timeout)?;
+        Ok(controller)
+    })();
+    match through_configfs {
+        Ok(controller) => Ok(controller),
+        // The gadget this kernel builds from configfs does not take the
+        // port: the one it has always had does, and the phone's own recovery
+        // reaches a computer through it.
+        Err(e) => {
+            let _ = crate::kmsg(&format!("the configfs gadget took no port, {e:#}; the older one is asked"));
+            set_prop("sys.usb.configfs", "0")?;
+            let _ = set_prop("sys.usb.config", "none");
+            thread::sleep(Duration::from_millis(200));
+            set_prop("sys.usb.config", config)?;
+            wait_prop("sys.usb.state", config, timeout)?;
+            Ok("the older gadget".to_string())
+        }
     }
-    let controller = bind()?;
-    wait_prop("sys.usb.state", config, timeout)?;
-    Ok(controller)
 }
 
 /// Ask init for `config` and wait until it is in place. Going to "none"

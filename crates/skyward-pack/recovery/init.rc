@@ -12,7 +12,16 @@ import /system/etc/init/skyward-mtp.rc
 
 on early-init
     start ueventd
+    # The key service registers with this one, as the phone's own AIDL
+    # services do; a recovery that cannot open the data partition still
+    # works without it, so a failure here goes no further.
+    start servicemanager
     setprop sys.usb.configfs 1
+
+    # The recovery works as root on the phone's own partitions, and the
+    # policy the phone ships is not written for it: nothing is refused while
+    # the port is young. Set again once the policy is in, below.
+    setenforce 0
 
     # The kernel stops a recovery that panics, as the phone's own does.
     write /proc/sys/kernel/panic_on_oops 1
@@ -79,6 +88,12 @@ on boot
     # A computer is given the recovery over adb from the start, as in the
     # recovery the phone maker ships.
     setprop sys.usb.config adb
+
+service servicemanager /system/bin/servicemanager
+    class core
+    user system
+    group system
+    seclabel u:r:servicemanager:s0
 
 service ueventd /system/bin/ueventd
     critical
