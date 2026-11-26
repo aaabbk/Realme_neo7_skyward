@@ -100,12 +100,17 @@ fn open(keys: Option<&KeyMint>, entries: &[Entry]) -> Result<Opened> {
         // hold mounts it with the entry of the one it holds.
         let holds = skyward_block::probe::filesystem(&reached.device)?;
         let entry = entries.iter().find(|e| holds.as_ref() == Some(&e.filesystem)).unwrap_or(&entries[0]);
+        // What the table says of the entry taken, and what the partition
+        // reads as now, is what a failure is read with: a partition of
+        // another filesystem than the table names, or one encrypted whole
+        // by a phone that does not say so, fails here and nowhere else.
+        let told = || tell_of(entry, &reached.device, holds.as_deref());
         let checked = match entry.extras.iter().any(|e| e == "check") {
-            true => Some(skyward_block::fsck::check(&reached.device, &entry.filesystem)?),
+            true => Some(skyward_block::fsck::check(&reached.device, &entry.filesystem).with_context(told)?),
             false => None,
         };
         std::fs::create_dir_all(MOUNT).with_context(|| format!("make {MOUNT}"))?;
-        mount::mount(&reached.device, Path::new(MOUNT), &entry.filesystem, &entry.options)?;
+        mount::mount(&reached.device, Path::new(MOUNT), &entry.filesystem, &entry.options).with_context(told)?;
         Ok((checked, entry.filesystem.clone()))
     })();
     match mounted {
@@ -115,6 +120,24 @@ fn open(keys: Option<&KeyMint>, entries: &[Entry]) -> Result<Opened> {
             Err(r) => Err(e.context(format!("removing {MAPPED} afterwards failed too: {r:#}"))),
         },
     }
+}
+
+/// What the phone's table says of the entry an opening took, and what the
+/// partition it names reads as now.
+fn tell_of(entry: &Entry, device: &Path, holds: Option<&str>) -> String {
+    let or = |said: &[String], nothing: &str| match said.is_empty() {
+        true => nothing.to_string(),
+        false => said.join(","),
+    };
+    format!(
+        "the phone's table has {} as {} for {}, mounted with {} and {}, and {}",
+        entry.device,
+        entry.filesystem,
+        entry.mount_point,
+        or(&entry.options, "no options"),
+        or(&entry.extras, "nothing else"),
+        skyward_block::probe::describe(device, holds),
+    )
 }
 
 /// The device the data partition's filesystem is read and written through,
@@ -143,13 +166,44 @@ impl Reached {
 /// partition itself where none has.
 fn reach(keys: Option<&KeyMint>, entries: &[Entry]) -> Result<Reached> {
     let device = skyward_block::fstab::device(&entries[0])?;
-    let Some((entry, encryption)) = encryption::whole(entries)? else {
-        return Ok(Reached { device: PathBuf::from(device), mapped: false });
+    // What the table says is what is done. Where it says the partition is
+    // encrypted whole but not in what, as a phone that keeps its key in the
+    // folder it names may, each way of giving the hardware that key is
+    // tried, and the one whose result reads as a filesystem the table names
+    // for the partition is the one the phone keeps it under.
+    let said = encryption::whole(entries)?;
+    let tries = match &said {
+        Some((entry, encryption)) => vec![(*entry, encryption.clone())],
+        None => encryption::unnamed(entries),
     };
-    let key = storage_key(key_service(keys)?, entry, &encryption)?;
-    let sectors = skyward_block::size_bytes(&device)? / 512;
-    let mapped = dm::create(MAPPED, &[target(&device, sectors, &key, &encryption)], false)?;
-    Ok(Reached { device: mapped, mapped: true })
+    if tries.is_empty() {
+        return Ok(Reached { device: PathBuf::from(device), mapped: false });
+    }
+    let mut why = Vec::new();
+    for (entry, encryption) in tries {
+        let under = || -> Result<PathBuf> {
+            let key = storage_key(key_service(keys)?, entry, &encryption)?;
+            let sectors = skyward_block::size_bytes(&device)? / 512;
+            let mapped = dm::create(MAPPED, &[target(&device, sectors, &key, &encryption)], false)?;
+            let holds = skyward_block::probe::filesystem(&mapped).ok().flatten();
+            if entries.iter().any(|e| holds.as_ref() == Some(&e.filesystem)) {
+                return Ok(mapped);
+            }
+            let _ = dm::remove(MAPPED);
+            anyhow::bail!("what it reads as is {}", holds.unwrap_or_else(|| "nothing known".to_string()))
+        };
+        match under() {
+            Ok(mapped) => return Ok(Reached { device: mapped, mapped: true }),
+            Err(e) => why.push(format!("{} {}: {e:#}", encryption.cipher, if encryption.wrapped { "wrapped for the hardware" } else { "as it is" })),
+        }
+    }
+    // A phone whose table names the cipher is not read as one that keeps it
+    // in another, and a phone whose key was kept under a folder the table
+    // names is told why neither way gave a filesystem the table knows.
+    match said {
+        Some(_) => anyhow::bail!("the partition opened in none of the ways the phone's table says: {}", why.join("; ")),
+        None => anyhow::bail!("the phone keeps a key for its data partition and the partition reads as no filesystem in either way it is given: {}", why.join("; ")),
+    }
 }
 
 /// Reach the data partition's filesystem without mounting it, for it to be

@@ -55,6 +55,36 @@ pub fn whole(entries: &[Entry]) -> Result<Option<(&Entry, Encryption)>> {
     Ok(None)
 }
 
+/// The cipher a phone keeps its data partition in where its table says
+/// nothing of the whole encryption: every phone Skyward has met that keeps
+/// a key for the partition and does not say in what cipher keeps it in XTS.
+const UNNAMED: &str = "aes-xts-plain64";
+
+/// The whole-partition encryptions a phone's table may leave unsaid: a
+/// phone that keeps a key for its data partition in the folder its table
+/// names for it has the partition encrypted whole, whether or not the
+/// table says so, as the Realme Neo7's does not. The key is given to the
+/// storage hardware wrapped where the phone's key service can wrap it, and
+/// as it is where it cannot; both are given, the wrapped one first, for
+/// the one whose key the hardware reads to be told from the partition it
+/// cannot read.
+pub fn unnamed(entries: &[Entry]) -> Vec<(&Entry, Encryption)> {
+    let mut out = Vec::new();
+    for entry in entries {
+        let Ok(dir) = key_dir(entry) else { continue };
+        // A folder that holds no key is one an earlier start of the phone
+        // made and left, or one a phone that encrypts nothing keeps.
+        if !dir.join("version").is_file() && !dir.join("encrypted_key").is_file() {
+            continue;
+        }
+        for wrapped in [true, false] {
+            out.push((entry, Encryption { cipher: UNNAMED.to_string(), wrapped }));
+        }
+        break;
+    }
+    out
+}
+
 /// Whether the phone's table has the partition's files encrypted one by
 /// one, each user's under keys of their own. Where it has not, every name
 /// and every file reads as it is once the filesystem is mounted.
@@ -157,6 +187,30 @@ mod tests {
         let plain = [entry(PLAIN), entry("latemount,wait")];
         assert_eq!(whole(&plain).unwrap(), None);
         assert!(!files(&plain));
+    }
+
+    #[test]
+    fn a_phone_that_keeps_a_key_and_says_nothing_of_the_cipher_has_the_partition_encrypted_whole() {
+        let at = std::env::temp_dir().join(format!("skyward-unnamed-{}", std::process::id()));
+        let kept = at.join("metadata_encryption");
+        std::fs::create_dir_all(kept.join("key")).unwrap();
+        let with_key = Entry {
+            device: "/dev/block/by-name/userdata".into(),
+            mount_point: "/data".into(),
+            filesystem: "f2fs".into(),
+            options: vec!["noatime".into(), "inlinecrypt".into()],
+            extras: vec![format!("keydirectory={}", kept.display()), "fileencryption=aes-256-xts:aes-256-cts:v2".into()],
+        };
+        assert!(unnamed(std::slice::from_ref(&with_key)).is_empty(), "a folder holding no key says nothing of one");
+        std::fs::write(kept.join("key/version"), "1\n").unwrap();
+        let two = [with_key.clone(), entry("quota")];
+        let said = unnamed(&two);
+        assert_eq!(said.len(), 2, "both ways of giving the hardware the key, and only the entry that names the folder");
+        assert!(said.iter().all(|(one, _)| *one == &with_key));
+        assert_eq!(said[0].1, Encryption { cipher: "aes-xts-plain64".into(), wrapped: true });
+        assert_eq!(said[1].1, Encryption { cipher: "aes-xts-plain64".into(), wrapped: false });
+        assert!(unnamed(&[entry("quota")]).is_empty(), "an entry that names no folder keeps no key");
+        std::fs::remove_dir_all(&at).unwrap();
     }
 
     #[test]
